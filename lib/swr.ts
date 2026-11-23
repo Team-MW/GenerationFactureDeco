@@ -13,10 +13,14 @@ export interface Cache<T> {
   /** Remplace la valeur (après une écriture réussie). */
   set(value: T): void;
   clear(): void;
+  /** Valeur actuellement en mémoire, sans rien charger. */
+  peek(): T | undefined;
 }
 
 interface Slot<T> {
   at: number;
+  /** Augmente à chaque écriture : une lecture commencée avant ne peut plus remplacer la valeur. */
+  generation: number;
   value?: T;
   loading?: Promise<T>;
 }
@@ -27,21 +31,26 @@ export function createCache<T>(name: string, load: () => Promise<T>, fresh: numb
   const map = (slots.__swr ??= new Map());
   const slot = () => {
     let s = map.get(name) as Slot<T> | undefined;
-    if (!s) map.set(name, (s = { at: 0 }));
+    if (!s) map.set(name, (s = { at: 0, generation: 0 }));
     return s;
   };
   const refresh = () => {
     const s = slot();
-    s.loading ??= load()
+    if (s.loading) return s.loading;
+    const generation = s.generation;
+    const loading: Promise<T> = load()
       .then((value) => {
+        // Une écriture est passée pendant ce chargement : on garde sa valeur, plus récente.
+        if (s.generation !== generation) return s.value !== undefined ? s.value : value;
         s.value = value;
         s.at = Date.now();
         return value;
       })
       .finally(() => {
-        s.loading = undefined;
+        if (s.loading === loading) s.loading = undefined;
       });
-    return s.loading;
+    s.loading = loading;
+    return loading;
   };
   return {
     async read() {
@@ -56,11 +65,20 @@ export function createCache<T>(name: string, load: () => Promise<T>, fresh: numb
     },
     set(value) {
       const s = slot();
+      s.generation += 1;
+      s.loading = undefined;
       s.value = value;
       s.at = Date.now();
     },
     clear() {
-      map.delete(name);
+      const s = slot();
+      s.generation += 1;
+      s.loading = undefined;
+      s.value = undefined;
+      s.at = 0;
+    },
+    peek() {
+      return slot().value;
     },
   };
 }

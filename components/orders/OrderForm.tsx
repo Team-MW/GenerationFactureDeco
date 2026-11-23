@@ -1,13 +1,23 @@
 "use client";
 
-import { Check, Gift, Hourglass, Loader2, Minus, Plus, Search, Trash2 } from "lucide-react";
+import { CalendarClock, Check, Gift, Hourglass, Loader2, Minus, Plus, Search, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { createOrder } from "@/app/commandes/actions";
 import { toast } from "@/lib/client";
 import { eur } from "@/lib/format";
-import { DELIVERY_MODES, SHOPS, orderTotals } from "@/lib/orders/logic";
-import type { Article, DeliveryMode, OrderInput, ShopId } from "@/lib/orders/types";
+import { DELIVERY_MODES, SHOPS, addDays, dayLabel, hourLabel, orderTotals, sortKey, timeLabel } from "@/lib/orders/logic";
+import type { Article, DeliveryMode, OrderInput, ShopId, Slot } from "@/lib/orders/types";
+
+/** Livraison ou retrait déjà au planning (pour voir la charge d'une journée avant de choisir). */
+export interface AgendaItem {
+  date: string;
+  slot: Slot;
+  time: string;
+  name: string;
+  mode: DeliveryMode;
+  city: string;
+}
 import { Card, CardHeader, buttonPrimary } from "../ui";
 import { MomentSelect, inputClass, parseMoment } from "./bits";
 
@@ -34,7 +44,7 @@ function Field({ label, className = "", children }: { label: string; className?:
   );
 }
 
-export default function OrderForm({ articles }: { articles: Article[] }) {
+export default function OrderForm({ articles, agenda, today }: { articles: Article[]; agenda: AgendaItem[]; today: string }) {
   const router = useRouter();
   const [customer, setCustomer] = useState({ name: "", phone: "", email: "", address: "", postalCode: "", city: "", notes: "" });
   const [shop, setShop] = useState<ShopId>("toulouse");
@@ -91,6 +101,7 @@ export default function OrderForm({ articles }: { articles: Article[] }) {
     return { available, enough: available >= line.quantity };
   };
   const waiting = lines.filter((l) => !availability(l).enough).length;
+  const dayAgenda = useMemo(() => agenda.filter((a) => a.date === date).sort((a, b) => sortKey(a).localeCompare(sortKey(b))), [agenda, date]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -291,7 +302,7 @@ export default function OrderForm({ articles }: { articles: Article[] }) {
         </Card>
 
         <Card>
-          <CardHeader title="Livraison" hint="Ajoutée comme une ligne du bon de livraison" />
+          <CardHeader title="Livraison" hint="Ajoutée comme une ligne du bon de commande" />
           <div className="p-4 md:p-5">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {(Object.keys(DELIVERY_MODES) as DeliveryMode[]).map((key) => {
@@ -340,16 +351,77 @@ export default function OrderForm({ articles }: { articles: Article[] }) {
                 </button>
               </div>
             ) : null}
+          </div>
+        </Card>
 
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:max-w-sm">
-              <Field label={mode === "retrait" ? "Date de retrait (facultatif)" : "Date de livraison (facultatif)"}>
+        <Card>
+          <CardHeader
+            title={mode === "retrait" ? "Programmer le retrait" : "Programmer la livraison"}
+            hint="Facultatif : vous pouvez aussi le faire plus tard depuis l'espace livraison. La date n'est pas imprimée sur le bon."
+          />
+          <div className="p-4 md:p-5">
+            <div className="flex flex-wrap gap-2">
+              {[
+                ["Aujourd'hui", today],
+                ["Demain", addDays(today, 1)],
+                ["Dans 1 semaine", addDays(today, 7)],
+                ["Dans 2 semaines", addDays(today, 14)],
+              ].map(([label, value]) => (
+                <button
+                  key={label}
+                  type="button"
+                  aria-pressed={date === value}
+                  onClick={() => setDate(value)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${date === value ? "bg-black text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+                >
+                  {label}
+                </button>
+              ))}
+              {date ? (
+                <button type="button" onClick={() => { setDate(""); setMoment(""); }} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100">
+                  <X size={13} /> Ne pas programmer
+                </button>
+              ) : null}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:max-w-sm">
+              <Field label="Date">
                 <input type="date" className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
               </Field>
               <Field label="Heure">
                 <MomentSelect value={moment} onChange={setMoment} disabled={!date} />
               </Field>
             </div>
-            {!date ? <p className="mt-2 text-xs text-slate-500">Sans date, la commande apparaîtra dans « À programmer » de l&apos;espace livraison.</p> : null}
+
+            {date ? (
+              <div className="mt-4 rounded-lg border border-slate-200">
+                <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 text-xs font-medium text-slate-700">
+                  <CalendarClock size={14} /> {dayLabel(date, today)} · {dayAgenda.length === 0 ? "rien de prévu" : `${dayAgenda.length} déjà prévu${dayAgenda.length > 1 ? "s" : ""}`}
+                </div>
+                {dayAgenda.length > 0 ? (
+                  <ul className="divide-y divide-slate-100 text-sm">
+                    {dayAgenda.map((item, index) => {
+                      const clash = Boolean(item.time) && item.time === parseMoment(moment).time;
+                      return (
+                        <li key={index} className={`flex items-center gap-3 px-3 py-2 ${clash ? "bg-amber-50" : ""}`}>
+                          <span className="tabular w-20 shrink-0 text-xs font-semibold text-slate-900">{timeLabel(item)}</span>
+                          <span className="min-w-0 flex-1 truncate text-slate-700">
+                            {item.name} · {DELIVERY_MODES[item.mode].short}
+                            {item.city ? ` · ${item.city}` : ""}
+                          </span>
+                          {clash ? <span className="shrink-0 text-xs font-medium text-amber-800">même heure</span> : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
+                <p className="border-t border-slate-100 px-3 py-2 text-xs text-slate-500">
+                  {parseMoment(moment).time ? `Cette commande sera placée à ${hourLabel(parseMoment(moment).time)}.` : "Choisissez une heure pour la placer dans le planning de la semaine."}
+                  {waiting > 0 ? " Un article est en attente de stock : vérifiez qu'il sera arrivé à cette date." : ""}
+                </p>
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-slate-500">Sans date, la commande apparaîtra dans « À programmer » de l&apos;espace livraison.</p>
+            )}
           </div>
         </Card>
 

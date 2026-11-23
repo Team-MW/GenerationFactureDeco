@@ -305,7 +305,6 @@ const globals = globalThis as unknown as {
   __lenboxQueue?: Promise<unknown>;
   __lenboxMemory?: State;
   __lenboxDisk?: string;
-  __lenboxSeen?: number;
   __lenboxDataset?: { key: string; dataset: Dataset };
 };
 
@@ -510,8 +509,8 @@ export async function getVersion(): Promise<string> {
   }
   const version = Number(await rpc<number>("lenbox_version"));
   // Un autre poste a importé ou retiré un fichier : on oublie la copie gardée en mémoire.
-  if (globals.__lenboxSeen !== undefined && globals.__lenboxSeen !== version) remoteCache.clear();
-  globals.__lenboxSeen = version;
+  const cached = remoteCache.peek();
+  if (cached && cached.version !== version) remoteCache.clear();
   return String(version);
 }
 
@@ -539,8 +538,9 @@ export async function importUpload(originalName: string, buffer: Buffer): Promis
     const report = importFiles(state, [{ name, size: buffer.length, buffer }], settings.invoicePrefix)[0];
     return { name, status: "imported", invoices: report.invoices };
   });
-  if (result.status === "imported" && !READ_ONLY) {
-    // Copie du fichier d'origine dans data/, pour archive.
+  if (result.status === "imported" && !READ_ONLY && !USES_SUPABASE) {
+    // Mode local uniquement : copie du fichier d'origine dans data/, pour archive.
+    // Avec la base de données, c'est elle qui fait foi : rien n'est recopié sur le disque.
     try {
       ensureDataDir();
       const target = path.join(DATA_DIR, result.name);

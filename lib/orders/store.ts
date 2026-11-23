@@ -45,7 +45,7 @@ interface OrderRow {
   geo: Order["geo"];
   history: Order["history"];
   /** Champs ajoutés après coup, regroupés pour éviter une migration à chaque évolution. */
-  extra: { shop?: ShopId; observations?: string; paid?: number; time?: string; payments?: Payment[]; extras?: Extra[] } | null;
+  extra: { shop?: ShopId; observations?: string; paid?: number; time?: string; payments?: Payment[]; extras?: Extra[]; geoFailed?: boolean } | null;
 }
 
 const articleFromRow = (r: ArticleRow): Article => ({
@@ -66,7 +66,15 @@ const articleToRow = (a: Article): ArticleRow => ({
   created_at: a.createdAt,
 });
 
-const orderFromRow = (r: OrderRow): Order => ({
+/** Une commande réglée avant l'existence du détail des encaissements reçoit une ligne unique équivalente. */
+function withPayments(order: Order): Order {
+  if (order.paid > 0 && order.payments.length === 0) {
+    order.payments = [{ at: order.createdAt, amount: order.paid, method: "", by: "magasin" }];
+  }
+  return order;
+}
+
+const orderFromRow = (r: OrderRow): Order => withPayments({
   id: r.id,
   number: r.number,
   createdAt: r.created_at,
@@ -88,6 +96,7 @@ const orderFromRow = (r: OrderRow): Order => ({
   status: r.status,
   doneAt: r.done_at,
   geo: r.geo,
+  geoFailed: r.extra?.geoFailed ?? false,
   history: r.history ?? [],
 });
 
@@ -108,7 +117,7 @@ const orderToRow = (o: Order): OrderRow => ({
   done_at: o.doneAt,
   geo: o.geo,
   history: o.history,
-  extra: { shop: o.shop, observations: o.observations, paid: o.paid, time: o.time, payments: o.payments, extras: o.extras },
+  extra: { shop: o.shop, observations: o.observations, paid: o.paid, time: o.time, payments: o.payments, extras: o.extras, geoFailed: o.geoFailed ?? false },
 });
 
 async function loadRemote(): Promise<{ db: Db; version: number }> {
@@ -178,6 +187,7 @@ function loadFile(): Db {
       order.time ??= "";
       order.payments ??= [];
       order.extras ??= [];
+      withPayments(order);
       order.customer.email ??= "";
     }
     return db;
@@ -205,6 +215,14 @@ async function mutateFile<T>(change: (db: Db) => T | Promise<T>): Promise<T> {
 export async function loadDb(): Promise<Db> {
   // Copie : une page ne doit jamais pouvoir modifier la valeur gardée en cache.
   return USES_SUPABASE ? structuredClone((await remoteCache.read()).db) : loadFile();
+}
+
+/** Lecture directe en base, sans cache : pour vérifier qu'un élément introuvable n'existe vraiment pas. */
+export async function loadDbFresh(): Promise<Db> {
+  if (!USES_SUPABASE) return loadFile();
+  const fresh = await loadRemote();
+  remoteCache.set(fresh);
+  return structuredClone(fresh.db);
 }
 
 /** Applique une modification de façon atomique : les écritures de ce serveur sont exécutées une par une. */

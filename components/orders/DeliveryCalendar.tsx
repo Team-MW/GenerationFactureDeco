@@ -34,7 +34,7 @@ function mondayOf(date: string): string {
 /** Numéro de semaine ISO. */
 function weekNumber(monday: string): number {
   const thursday = new Date(`${addDays(monday, 3)}T12:00:00Z`);
-  const yearStart = Date.UTC(thursday.getUTCFullYear(), 0, 1);
+  const yearStart = Date.UTC(thursday.getUTCFullYear(), 0, 1, 12);
   return Math.ceil(((thursday.getTime() - yearStart) / 86400000 + 1) / 7);
 }
 

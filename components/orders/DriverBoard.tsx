@@ -242,7 +242,7 @@ export default function DriverBoard({ date, today, orders, depot }: { date: stri
   const [busy, setBusy] = useState(false);
 
   // Coordonnées manquantes : recherchées une fois à l'ouverture de la journée.
-  const missing = orders.some((o) => !o.geo && fullAddress(o)) || !depot;
+  const missing = orders.some((o) => !o.geo && !o.geoFailed && fullAddress(o)) || !depot;
   useEffect(() => {
     if (!missing || orders.length === 0) return;
     let cancelled = false;

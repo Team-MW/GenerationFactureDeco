@@ -98,6 +98,8 @@ export interface Order {
   status: OrderStatus;
   doneAt: string | null;
   geo: { lat: number; lon: number } | null;
+  /** L'adresse n'a pas pu être placée sur la carte : inutile de réessayer à chaque ouverture. */
+  geoFailed?: boolean;
   history: { at: string; text: string }[];
 }
 

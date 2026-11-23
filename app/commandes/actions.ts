@@ -17,6 +17,8 @@ const clean = (value: unknown, max = 200) => String(value ?? "").trim().slice(0,
 const frDate = (date: string) => date.split("-").reverse().join("/");
 const isDate = (value: unknown): value is string => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 
+const euros = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
+
 class UserError extends Error {}
 
 /** Exécute une action et renvoie toujours un résultat lisible par l'interface. */
@@ -155,12 +157,13 @@ async function locate(orderId: string) {
 async function locateOrder(orderId: string) {
   const db = await loadDb();
   const order = db.orders.find((o) => o.id === orderId);
-  if (!order || order.geo || isPickup(order)) return;
+  if (!order || order.geo || order.geoFailed || isPickup(order)) return;
   const geo = await geocode(fullAddress(order));
-  if (!geo) return;
   await mutate((fresh) => {
     const target = fresh.orders.find((o) => o.id === orderId);
-    if (target) target.geo = geo;
+    if (!target) return;
+    if (geo) target.geo = geo;
+    else target.geoFailed = true; // adresse introuvable : on ne réessaiera pas à chaque ouverture
   });
 }
 
@@ -309,7 +312,39 @@ export async function setPaid(orderId: string, amount: number) {
   );
 }
 
-const euros = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
+/** Encaissement au magasin : ajoute un montant à ce qui est déjà réglé (calculé sur les données à jour). */
+export async function addShopPayment(orderId: string, amount: number) {
+  return run(() =>
+    mutate((db) => {
+      const order = findOrder(db, orderId);
+      if (order.status === "cancelled") throw new UserError("Cette commande est annulée.");
+      const value = round2(Number(amount));
+      if (!Number.isFinite(value) || value <= 0) throw new UserError("Montant invalide.");
+      const rest = round2(orderTotals(order).total - order.paid);
+      if (value > rest) throw new UserError(`Le reste à payer n'est que de ${euros(rest)}.`);
+      order.paid = round2(order.paid + value);
+      order.payments.push({ at: now(), amount: value, method: "", by: "magasin" });
+      log(order, rest - value <= 0 ? "Commande réglée en totalité" : `Encaissé au magasin : ${euros(value)}`);
+      return undefined;
+    }),
+  );
+}
+
+/** Solde la commande : encaisse exactement ce qu'il reste à payer à cet instant. */
+export async function settleOrder(orderId: string) {
+  return run(() =>
+    mutate((db) => {
+      const order = findOrder(db, orderId);
+      if (order.status === "cancelled") throw new UserError("Cette commande est annulée.");
+      const rest = round2(orderTotals(order).total - order.paid);
+      if (rest <= 0) return undefined;
+      order.paid = round2(order.paid + rest);
+      order.payments.push({ at: now(), amount: rest, method: "", by: "magasin" });
+      log(order, "Commande réglée en totalité");
+      return undefined;
+    }),
+  );
+}
 
 /** Encaissement par le livreur pendant sa tournée (espèces, carte, chèque…). */
 export async function collectPayment(orderId: string, amount: number, method: PaymentMethod) {
@@ -419,8 +454,8 @@ export async function locateDeliveries(date: string) {
       const geo = await geocode(depotAddress);
       if (geo) await mutate((fresh) => void (fresh.depot = { address: depotAddress, ...geo }));
     }
-    const missing = db.orders.filter((o) => o.scheduledDate === date && !o.geo && !isPickup(o) && o.status !== "cancelled");
-    for (const order of missing.slice(0, 15)) {
+    const missing = db.orders.filter((o) => o.scheduledDate === date && !o.geo && !o.geoFailed && !isPickup(o) && o.status !== "cancelled");
+    for (const order of missing.slice(0, 6)) {
       await locate(order.id);
       // Nominatim demande au plus une requête par seconde.
       await new Promise((resolve) => setTimeout(resolve, 1100));

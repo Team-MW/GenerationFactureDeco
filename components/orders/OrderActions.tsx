@@ -3,7 +3,7 @@
 import { Ban, CalendarClock, Check, Loader2, PackageCheck, Undo2, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { cancelOrder, completeOrder, scheduleOrder, setPaid, setPrepared } from "@/app/commandes/actions";
+import { addShopPayment, cancelOrder, completeOrder, scheduleOrder, setPaid, setPrepared, settleOrder } from "@/app/commandes/actions";
 import { eur } from "@/lib/format";
 import { toast } from "@/lib/client";
 import { isPickup, isStockComplete, orderBalance } from "@/lib/orders/logic";
@@ -100,7 +100,7 @@ export function PaymentControl({ order }: { order: Order }) {
               disabled={pending || value <= 0}
               onClick={() =>
                 run(async () => {
-                  const result = await setPaid(order.id, Math.round((balance.paid + value) * 100) / 100);
+                  const result = await addShopPayment(order.id, value);
                   if (result.ok) setAmount("");
                   return result;
                 }, "Paiement enregistré")
@@ -110,7 +110,7 @@ export function PaymentControl({ order }: { order: Order }) {
               <Wallet size={16} /> Ajouter
             </button>
           </div>
-          <button type="button" disabled={pending} onClick={() => run(() => setPaid(order.id, balance.total), "Commande réglée")} className={`${buttonPrimary} justify-center`}>
+          <button type="button" disabled={pending} onClick={() => run(() => settleOrder(order.id), "Commande réglée")} className={`${buttonPrimary} justify-center`}>
             <Check size={16} /> Marquer payée en totalité
           </button>
         </div>

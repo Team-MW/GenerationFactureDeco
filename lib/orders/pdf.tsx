@@ -2,7 +2,7 @@ import { Document, Page, StyleSheet, Text, View, renderToBuffer } from "@react-p
 import { dateFr } from "../format";
 import type { Settings } from "../types";
 import { CGV, TAGLINE } from "./cgv";
-import { DELIVERY_MODES, SHOPS, timeLabel, fullAddress, orderBalance, orderTotals, parisDate } from "./logic";
+import { DELIVERY_MODES, SHOPS, fullAddress, orderBalance, orderTotals, parisDate } from "./logic";
 import type { Order, ShopId } from "./types";
 
 /**
@@ -185,9 +185,6 @@ function OrderDocument({ order, settings }: { order: Order; settings: Settings }
               {order.delivery.offered ? <Text style={[s.sub, s.bold]}>Offert</Text> : null}
               {!order.delivery.offered && order.delivery.adjustment > 0 ? <Text style={s.sub}>Dont supplément distance {money(order.delivery.adjustment)}</Text> : null}
               {!order.delivery.offered && order.delivery.adjustment < 0 ? <Text style={s.sub}>Dont remise {money(-order.delivery.adjustment)}</Text> : null}
-              <Text style={s.sub}>
-                {pickup ? "Retrait" : "Livraison"} : {order.scheduledDate ? `${dateFr(order.scheduledDate)} · ${timeLabel(order)}` : "date à convenir"}
-              </Text>
               {order.customer.notes ? <Text style={s.sub}>{order.customer.notes}</Text> : null}
             </View>
             <Text style={s.cUnit}>{pickup ? " " : order.delivery.offered ? "Offert" : money(totals.delivery)}</Text>

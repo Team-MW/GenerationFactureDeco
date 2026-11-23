@@ -6,7 +6,7 @@ import { PreparedBadge, StageBadge, StockBadge, Warning } from "@/components/ord
 import { Card, CardHeader, buttonSecondary } from "@/components/ui";
 import { dateFr, eur } from "@/lib/format";
 import { DELIVERY_MODES, PAYMENT_METHODS, SHOPS, timeLabel, fullAddress, isPickup, isStockComplete, orderTotals } from "@/lib/orders/logic";
-import { loadDb } from "@/lib/orders/store";
+import { loadDb, loadDbFresh } from "@/lib/orders/store";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +15,7 @@ const when = (iso: string) =>
 
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const order = (await loadDb()).orders.find((o) => o.id === id);
+  const order = (await loadDb()).orders.find((o) => o.id === id) ?? (await loadDbFresh()).orders.find((o) => o.id === id);
   if (!order) notFound();
   const totals = orderTotals(order);
   const mode = DELIVERY_MODES[order.delivery.mode];

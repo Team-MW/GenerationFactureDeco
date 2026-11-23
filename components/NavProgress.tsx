@@ -23,7 +23,7 @@ function Bar() {
 
   useEffect(() => {
     const onClick = (event: MouseEvent) => {
-      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const link = (event.target as Element | null)?.closest?.("a");
       if (!link || link.target === "_blank" || link.hasAttribute("download")) return;
       const url = new URL(link.href, location.href);
@@ -34,9 +34,9 @@ function Bar() {
       // Avance vite au début puis ralentit, sans jamais atteindre 100 % avant l'arrivée.
       timer.current = setInterval(() => setProgress((value) => (value === null ? null : value + (92 - value) * 0.12)), 180);
     };
-    document.addEventListener("click", onClick);
+    document.addEventListener("click", onClick, true);
     return () => {
-      document.removeEventListener("click", onClick);
+      document.removeEventListener("click", onClick, true);
       if (timer.current) clearInterval(timer.current);
     };
   }, []);
