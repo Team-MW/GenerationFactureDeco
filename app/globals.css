@@ -2,10 +2,10 @@
 
 @theme {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --color-ink: #0b1220;
+  --color-ink: #000000;
   --color-canvas: #f5f6f8;
-  --color-brand: #1d4ed8;
-  --color-brand-soft: #eff4ff;
+  --color-brand: #0a0a0a;
+  --color-brand-soft: #f1f1f2;
 }
 
 :root {

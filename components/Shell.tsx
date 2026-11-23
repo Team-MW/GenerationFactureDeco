@@ -108,24 +108,14 @@ export default function Shell({ companyName, children }: { companyName: string; 
     };
   }, [router]);
 
-  const initials = companyName
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
-
   return (
     <div className="flex min-h-screen">
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col bg-ink px-3 py-5 text-slate-300 md:flex">
-        <div className="flex items-center gap-3 px-2 pb-6">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-brand text-sm font-semibold text-white">
-            {initials || "F"}
-          </div>
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-white">{companyName}</div>
-            <div className="text-xs text-slate-400">Facturation</div>
-          </div>
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col bg-black px-4 py-6 md:flex">
+        <div className="px-3 pb-8">
+          <div className="truncate text-lg font-semibold tracking-tight text-white">{companyName}</div>
+          <div className="mt-0.5 text-xs font-medium uppercase tracking-[0.14em] text-neutral-500">Facturation</div>
         </div>
+        <div className="px-3 pb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-neutral-600">Menu</div>
         <nav className="flex flex-col gap-1">
           {NAV.map(({ href, label, icon: Icon }) => {
             const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -133,29 +123,33 @@ export default function Shell({ companyName, children }: { companyName: string; 
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  active ? "bg-white/10 text-white" : "text-slate-400 hover:bg-white/5 hover:text-slate-100"
+                aria-current={active ? "page" : undefined}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+                  active ? "bg-white text-black" : "text-neutral-400 hover:bg-white/10 hover:text-white"
                 }`}
               >
-                <Icon size={17} strokeWidth={1.8} />
+                <Icon size={18} strokeWidth={active ? 2.1 : 1.8} />
                 {label}
               </Link>
             );
           })}
         </nav>
-        <div className="mt-auto rounded-lg border border-white/10 bg-white/5 p-3 text-xs leading-relaxed text-slate-400">
-          <div className="mb-1 flex items-center gap-2 font-medium text-slate-200">
-            <UploadCloud size={14} /> Import automatique
+        <div className="mt-auto border-t border-white/10 px-3 pt-5">
+          <div className="flex items-center gap-2 text-sm font-medium text-white">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+            </span>
+            Import automatique
           </div>
-          Glissez vos fichiers CSV ou Excel n&apos;importe où dans la fenêtre : les factures sont générées aussitôt.
+          <p className="mt-2 text-xs leading-relaxed text-neutral-500">
+            Glissez vos fichiers CSV ou Excel dans la fenêtre : les factures sont générées aussitôt.
+          </p>
         </div>
       </aside>
 
       <div className="min-w-0 flex-1">
         <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 bg-white/90 px-4 py-2.5 backdrop-blur md:hidden">
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-xs font-semibold text-white">
-            {initials || "F"}
-          </div>
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold leading-tight text-slate-900">{companyName}</div>
             <div className="text-[11px] leading-tight text-slate-500">
@@ -191,7 +185,7 @@ export default function Shell({ companyName, children }: { companyName: string; 
       </nav>
 
       {dragging ? (
-        <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center bg-ink/70 p-8 backdrop-blur-sm">
+        <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center bg-black/75 p-8 backdrop-blur-sm">
           <div className="rounded-2xl border-2 border-dashed border-white/60 px-16 py-14 text-center text-white">
             <UploadCloud size={44} className="mx-auto mb-4" strokeWidth={1.5} />
             <div className="text-xl font-semibold">Déposez vos fichiers ici</div>
@@ -204,7 +198,7 @@ export default function Shell({ companyName, children }: { companyName: string; 
         {toasts.map((t) => {
           const Icon = TOAST_ICONS[t.kind];
           return (
-            <div key={t.id} className="toast-in flex items-start gap-3 rounded-lg bg-ink px-4 py-3 text-sm text-white shadow-lg">
+            <div key={t.id} className="toast-in flex items-start gap-3 rounded-xl bg-black px-4 py-3 text-sm text-white shadow-lg">
               <Icon size={18} className={`mt-0.5 shrink-0 ${TOAST_COLORS[t.kind]}`} />
               <span>{t.message}</span>
             </div>

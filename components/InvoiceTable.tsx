@@ -61,7 +61,7 @@ export default function InvoiceTable({ invoices, initialMonth }: { invoices: Inv
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Rechercher un client, un numéro…"
-              className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-base outline-none md:text-sm placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-base outline-none md:text-sm placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-neutral-200"
             />
           </div>
           <select

@@ -8,7 +8,7 @@ import type { Settings } from "@/lib/types";
 import { Card, CardHeader, buttonPrimary, buttonSecondary } from "./ui";
 
 const inputClass =
-  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 md:text-sm outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-blue-100";
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 md:text-sm outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-neutral-200";
 
 function Field({ label, hint, className = "", children }: { label: string; hint?: string; className?: string; children: ReactNode }) {
   return (
@@ -23,7 +23,7 @@ function Field({ label, hint, className = "", children }: { label: string; hint?
 function Toggle({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint: string }) {
   return (
     <label className="flex cursor-pointer items-start gap-3">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 h-4 w-4 accent-blue-700" />
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 h-4 w-4 accent-black" />
       <span>
         <span className="block text-sm font-medium text-slate-900">{label}</span>
         <span className="block text-xs text-slate-500">{hint}</span>
