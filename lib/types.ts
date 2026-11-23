@@ -17,6 +17,8 @@ export interface Invoice {
   retained: number;
   net: number;
   file: string;
+  /** Désignation propre à cette facture (ex. le meuble vendu) ; vide = désignation générale des paramètres. */
+  designation: string;
 }
 
 /** Ligne sans vente (montant d'origine nul) : retenue / remboursement. */

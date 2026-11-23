@@ -2,3 +2,17 @@ node_modules
 .next
 next-env.d.ts
 *.tsbuildinfo
+.env*.local
+.env
+
+# Photos de documents contenant des données clients
+*.HEIC
+*.heic
+# Commandes enregistrées en local (données clients)
+data/gestion.json
+data/gestion.json.tmp
+data/lenbox.json.tmp
+data/.corbeille/
+
+# Document d exemple généré pour vérification
+Exemple bon de commande.pdf

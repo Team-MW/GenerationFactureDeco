@@ -29,7 +29,7 @@ export default function ImportZone({ files }: { files: SourceFile[] }) {
     const warning =
       `Retirer « ${file.name} » ?\n\n` +
       `Ses ${file.invoices} factures disparaîtront de l'application. ` +
-      `Le fichier est déplacé dans data/.corbeille et peut être restauré.`;
+      `Vous pourrez le réimporter plus tard : les numéros de facture seront conservés.`;
     if (!window.confirm(warning)) return;
     const response = await fetch(`/api/fichiers?nom=${encodeURIComponent(file.name)}`, { method: "DELETE" });
     if (response.ok) {

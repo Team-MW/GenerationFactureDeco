@@ -8,7 +8,7 @@ export const maxDuration = 60;
 /** Archive ZIP des factures d'un mois (?mois=2026-01) ou de toutes les factures. */
 export async function GET(request: Request) {
   const month = new URL(request.url).searchParams.get("mois");
-  const invoices = getDataset().invoices.filter((i) => !month || i.month === month);
+  const invoices = (await getDataset()).invoices.filter((i) => !month || i.month === month);
   if (invoices.length === 0) return new Response("Aucune facture", { status: 404 });
 
   const zip = new JSZip();

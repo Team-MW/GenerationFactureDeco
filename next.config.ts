@@ -4,6 +4,14 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@react-pdf/renderer"],
   turbopack: { root: __dirname },
   devIndicators: false,
+  // Anciennes adresses (avant la page d'accueil) : redirigées vers l'espace Lenbox.
+  async redirects() {
+    return ["factures", "import", "parametres"].map((page) => ({
+      source: `/${page}`,
+      destination: `/lenbox/${page}`,
+      permanent: false,
+    }));
+  },
   // Les fichiers source et le logo doivent accompagner les fonctions serveur une fois déployé.
   outputFileTracingIncludes: { "/**": ["./data/**/*"] },
   // Les PDF déjà générés en local n'ont pas à être embarqués : ils sont recréés à la demande.

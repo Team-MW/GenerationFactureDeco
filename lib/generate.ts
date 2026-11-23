@@ -4,7 +4,7 @@ import path from "node:path";
 import { getDataset } from "./data";
 import { MONTHS } from "./format";
 import { renderInvoicePdf } from "./pdf";
-import { OUTPUT_DIR, READ_ONLY, getLogoPath, getSettings } from "./settings";
+import { OUTPUT_DIR, READ_ONLY, getLogo, getSettings, type Logo } from "./settings";
 import type { Invoice, Settings } from "./types";
 
 const STATE_FILE = path.join(OUTPUT_DIR, ".etat.json");
@@ -29,20 +29,11 @@ function writeState(state: State) {
   fs.writeFileSync(STATE_FILE, JSON.stringify(state));
 }
 
-function logoSignature(logo: string | null): string {
-  if (!logo) return "";
-  try {
-    return `${logo}:${fs.statSync(logo).mtimeMs}`;
-  } catch {
-    return "";
-  }
-}
-
 /** Empreinte de tout ce qui influe sur le rendu d'une facture. */
-function invoiceKey(invoice: Invoice, settings: Settings, logo: string | null): string {
+function invoiceKey(invoice: Invoice, settings: Settings, logo: Logo | null): string {
   return crypto
     .createHash("sha1")
-    .update(JSON.stringify([TEMPLATE_VERSION, invoice, settings, logoSignature(logo)]))
+    .update(JSON.stringify([TEMPLATE_VERSION, invoice, settings, logo?.stamp ?? ""]))
     .digest("hex");
 }
 
@@ -59,8 +50,8 @@ export function monthFolder(month: string): string {
 
 /** Retourne le PDF d'une facture : relu depuis le disque s'il est à jour, sinon régénéré et enregistré. */
 export async function getInvoicePdf(invoice: Invoice, shared?: State): Promise<Buffer> {
-  const settings = getSettings();
-  const logo = getLogoPath();
+  const settings = await getSettings();
+  const logo = await getLogo();
   // Disque en lecture seule : le PDF est produit en mémoire, sans copie sur le disque.
   if (READ_ONLY) return renderInvoicePdf(invoice, settings, logo);
   const key = invoiceKey(invoice, settings, logo);
@@ -100,10 +91,10 @@ export function generateMissing(): Promise<number> {
   if (READ_ONLY) return Promise.resolve(0);
   if (lock.__factureGenerating) return lock.__factureGenerating;
   const run = (async () => {
-    const { invoices } = getDataset();
+    const { invoices } = await getDataset();
     if (invoices.length === 0) return 0;
-    const settings = getSettings();
-    const logo = getLogoPath();
+    const settings = await getSettings();
+    const logo = await getLogo();
     const state = readState();
     let written = 0;
     for (const invoice of invoices) {

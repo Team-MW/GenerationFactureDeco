@@ -1,16 +1,16 @@
 "use client";
 
-import { CheckCircle2, FileText, Info, LayoutDashboard, Settings, UploadCloud, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileText, Info, LayoutDashboard, Settings, UploadCloud, XCircle } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast, uploadFiles, type ToastKind } from "@/lib/client";
 
 const NAV = [
-  { href: "/", label: "Tableau de bord", short: "Accueil", icon: LayoutDashboard },
-  { href: "/factures", label: "Factures", short: "Factures", icon: FileText },
-  { href: "/import", label: "Import des fichiers", short: "Import", icon: UploadCloud },
-  { href: "/parametres", label: "Paramètres", short: "Réglages", icon: Settings },
+  { href: "/lenbox", label: "Tableau de bord", short: "Accueil", icon: LayoutDashboard },
+  { href: "/lenbox/factures", label: "Factures", short: "Factures", icon: FileText },
+  { href: "/lenbox/import", label: "Import des fichiers", short: "Import", icon: UploadCloud },
+  { href: "/lenbox/parametres", label: "Paramètres", short: "Réglages", icon: Settings },
 ];
 
 interface ToastItem {
@@ -51,6 +51,7 @@ export default function Shell({ companyName, children }: { companyName: string; 
         const response = await fetch("/api/sync", { cache: "no-store" });
         const data: { version: string } = await response.json();
         if (stopped) return;
+        if (!data.version) return;
         if (version.current !== null && version.current !== data.version) {
           toast("Dossier mis à jour · factures actualisées", "info");
           router.refresh();
@@ -61,7 +62,7 @@ export default function Shell({ companyName, children }: { companyName: string; 
       }
     };
     void check();
-    const timer = setInterval(check, 4000);
+    const timer = setInterval(check, 10000);
     return () => {
       stopped = true;
       clearInterval(timer);
@@ -113,12 +114,12 @@ export default function Shell({ companyName, children }: { companyName: string; 
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col bg-black px-4 py-6 md:flex">
         <div className="px-3 pb-8">
           <div className="truncate text-lg font-semibold tracking-tight text-white">{companyName}</div>
-          <div className="mt-0.5 text-xs font-medium uppercase tracking-[0.14em] text-neutral-500">Facturation</div>
+          <div className="mt-0.5 text-xs font-medium uppercase tracking-[0.14em] text-neutral-500">Gestion Lenbox</div>
         </div>
         <div className="px-3 pb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-neutral-600">Menu</div>
         <nav className="flex flex-col gap-1">
           {NAV.map(({ href, label, icon: Icon }) => {
-            const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+            const active = href === "/lenbox" ? pathname === "/lenbox" : pathname.startsWith(href);
             return (
               <Link
                 key={href}
@@ -134,7 +135,14 @@ export default function Shell({ companyName, children }: { companyName: string; 
             );
           })}
         </nav>
-        <div className="mt-auto border-t border-white/10 px-3 pt-5">
+        <Link
+          href="/"
+          className="mt-auto flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-neutral-400 transition-colors hover:bg-white/10 hover:text-white"
+        >
+          <ArrowLeft size={18} strokeWidth={1.8} />
+          Retour à l&apos;accueil
+        </Link>
+        <div className="mt-3 border-t border-white/10 px-3 pt-5">
           <div className="flex items-center gap-2 text-sm font-medium text-white">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
@@ -149,11 +157,14 @@ export default function Shell({ companyName, children }: { companyName: string; 
       </aside>
 
       <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 bg-white/90 px-4 py-2.5 backdrop-blur md:hidden">
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 bg-white/90 px-2 py-2.5 backdrop-blur md:hidden">
+          <Link href="/" aria-label="Retour à l'accueil" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-600 active:bg-slate-100">
+            <ArrowLeft size={20} />
+          </Link>
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold leading-tight text-slate-900">{companyName}</div>
             <div className="text-[11px] leading-tight text-slate-500">
-              {NAV.find((n) => (n.href === "/" ? pathname === "/" : pathname.startsWith(n.href)))?.label ?? "Facturation"}
+              {NAV.find((n) => (n.href === "/lenbox" ? pathname === "/lenbox" : pathname.startsWith(n.href)))?.label ?? "Gestion Lenbox"}
             </div>
           </div>
         </header>
@@ -165,7 +176,7 @@ export default function Shell({ companyName, children }: { companyName: string; 
         className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
       >
         {NAV.map(({ href, short, icon: Icon }) => {
-          const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+          const active = href === "/lenbox" ? pathname === "/lenbox" : pathname.startsWith(href);
           return (
             <Link
               key={href}

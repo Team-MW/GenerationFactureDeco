@@ -1,9 +1,12 @@
-import { getDataset } from "@/lib/data";
+import { getVersion } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 /** Interrogé régulièrement par l'interface pour détecter les nouveaux fichiers. */
-export function GET() {
-  const { version, invoices, files } = getDataset();
-  return Response.json({ version, invoices: invoices.length, files: files.length });
+export async function GET() {
+  try {
+    return Response.json({ version: await getVersion() });
+  } catch {
+    return Response.json({ version: null }, { status: 503 });
+  }
 }

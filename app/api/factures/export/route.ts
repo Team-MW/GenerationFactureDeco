@@ -8,15 +8,15 @@ const num = (n: number) => n.toFixed(2).replace(".", ",");
 const cell = (v: string) => (/[";\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
 
 /** Journal des ventes au format CSV (séparateur « ; », lisible par Excel). */
-export function GET(request: Request) {
+export async function GET(request: Request) {
   const month = new URL(request.url).searchParams.get("mois");
-  const settings = getSettings();
-  const invoices = getDataset().invoices.filter((i) => !month || i.month === month);
+  const settings = await getSettings();
+  const invoices = (await getDataset()).invoices.filter((i) => !month || i.month === month);
   const lines = [
-    ["Numéro", "Date", "Client", "Référence dossier", "Total HT", "TVA", "Total TTC", "Commission", "Retenue", "Net encaissé"],
+    ["Numéro", "Date", "Client", "Référence dossier", "Désignation", "Total HT", "TVA", "Total TTC", "Commission", "Retenue", "Net encaissé"],
     ...invoices.map((i) => {
       const { ht, vat, ttc } = computeTotals(i.amount, settings);
-      return [i.number, dateFr(i.date), i.client, i.ref, num(ht), num(vat), num(ttc), num(i.commission), num(i.retained), num(i.net)];
+      return [i.number, dateFr(i.date), i.client, i.ref, i.designation || settings.designation, num(ht), num(vat), num(ttc), num(i.commission), num(i.retained), num(i.net)];
     }),
   ];
   const csv = "﻿" + lines.map((l) => l.map(cell).join(";")).join("\r\n");

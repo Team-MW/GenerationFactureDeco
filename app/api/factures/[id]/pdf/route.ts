@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const invoice = findInvoice(id);
+  const invoice = await findInvoice(id);
   if (!invoice) return new Response("Facture introuvable", { status: 404 });
   const pdf = await getInvoicePdf(invoice);
   const download = new URL(request.url).searchParams.has("telecharger");

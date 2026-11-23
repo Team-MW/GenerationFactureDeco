@@ -1,5 +1,6 @@
 import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { computeTotals, dateFr, dateLong } from "./format";
+import type { Logo } from "./settings";
 import type { Invoice, Settings } from "./types";
 
 const INK = "#0f172a";
@@ -57,7 +58,7 @@ const eurFmt = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EU
 // La police Helvetica intégrée ne connaît pas les espaces fines insécables.
 const money = (n: number) => eurFmt.format(n).replace(/[  ]/g, " ");
 
-function InvoiceDocument({ invoice, settings, logo }: { invoice: Invoice; settings: Settings; logo: string | null }) {
+function InvoiceDocument({ invoice, settings, logo }: { invoice: Invoice; settings: Settings; logo: Logo | null }) {
   const accent = settings.accentColor;
   const { ht, vat, ttc } = computeTotals(invoice.amount, settings);
   const vatLabel = settings.vatRate > 0 ? `${String(settings.vatRate).replace(".", ",")} %` : "—";
@@ -82,7 +83,7 @@ function InvoiceDocument({ invoice, settings, logo }: { invoice: Invoice; settin
           <View>
             {logo ? (
               // eslint-disable-next-line jsx-a11y/alt-text
-              <Image src={logo} style={styles.logo} />
+              <Image src={{ data: logo.data, format: logo.format }} style={styles.logo} />
             ) : (
               <Text style={[styles.company, { color: accent }]}>{settings.companyName}</Text>
             )}
@@ -146,7 +147,7 @@ function InvoiceDocument({ invoice, settings, logo }: { invoice: Invoice; settin
         </View>
         <View style={styles.row}>
           <View style={styles.cDesc}>
-            <Text style={styles.desc}>{settings.designation || "Prestation"}</Text>
+            <Text style={styles.desc}>{invoice.designation || settings.designation || "Prestation"}</Text>
             {settings.description ? <Text style={styles.descSub}>{settings.description}</Text> : null}
           </View>
           <Text style={styles.cQty}>1</Text>
@@ -201,6 +202,6 @@ function InvoiceDocument({ invoice, settings, logo }: { invoice: Invoice; settin
   );
 }
 
-export function renderInvoicePdf(invoice: Invoice, settings: Settings, logo: string | null): Promise<Buffer> {
+export function renderInvoicePdf(invoice: Invoice, settings: Settings, logo: Logo | null): Promise<Buffer> {
   return renderToBuffer(<InvoiceDocument invoice={invoice} settings={settings} logo={logo} />);
 }

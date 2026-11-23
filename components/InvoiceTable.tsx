@@ -1,7 +1,9 @@
 "use client";
 
-import { Archive, ChevronDown, ChevronUp, Download, Eye, FileSpreadsheet, Search, X } from "lucide-react";
+import { Archive, Check, ChevronDown, ChevronUp, Download, Eye, FileSpreadsheet, Loader2, Search, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "@/lib/client";
 import { dateFr, eur, monthLabel } from "@/lib/format";
 import type { Invoice } from "@/lib/types";
 import { Card, buttonPrimary, buttonSecondary } from "./ui";
@@ -19,7 +21,53 @@ const COLUMNS: { key: SortKey; label: string; align?: "right" }[] = [
 const normalize = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
-export default function InvoiceTable({ invoices, initialMonth }: { invoices: Invoice[]; initialMonth: string }) {
+/** Champ « désignation » d'une facture : le meuble vendu, modifiable facture par facture. */
+function DesignationEditor({ invoice, fallback, onSaved }: { invoice: Invoice; fallback: string; onSaved: (designation: string) => void }) {
+  const [value, setValue] = useState(invoice.designation);
+  const [saving, setSaving] = useState(false);
+  const changed = value.trim() !== invoice.designation;
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/factures/${invoice.id}/designation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ designation: value }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      toast(value.trim() ? "Désignation enregistrée" : "Désignation générale rétablie");
+      onSaved(value.trim());
+    } catch (error) {
+      toast((error instanceof Error && error.message) || "Enregistrement impossible", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <form onSubmit={save} className="flex flex-wrap items-end gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3 md:px-5">
+      <label className="min-w-[200px] flex-1">
+        <span className="mb-1 block text-xs font-medium text-slate-700">Désignation sur cette facture (meuble vendu)</span>
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          maxLength={200}
+          placeholder={fallback}
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-base outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-neutral-200 md:text-sm"
+        />
+      </label>
+      <button type="submit" disabled={saving || !changed} className={buttonPrimary}>
+        {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Enregistrer
+      </button>
+      <p className="w-full text-xs text-slate-500">Laissez vide pour utiliser la désignation générale : « {fallback} ».</p>
+    </form>
+  );
+}
+
+export default function InvoiceTable({ invoices, initialMonth, defaultDesignation }: { invoices: Invoice[]; initialMonth: string; defaultDesignation: string }) {
+  const router = useRouter();
+  const [stamp, setStamp] = useState(0);
   const months = useMemo(() => [...new Set(invoices.map((i) => i.month))].sort().reverse(), [invoices]);
   const [month, setMonth] = useState(months.includes(initialMonth) ? initialMonth : "");
   const [query, setQuery] = useState("");
@@ -37,7 +85,7 @@ export default function InvoiceTable({ invoices, initialMonth }: { invoices: Inv
     const filtered = invoices.filter(
       (i) =>
         (!month || i.month === month) &&
-        (!q || normalize(`${i.client} ${i.number} ${i.ref}`).includes(q)),
+        (!q || normalize(`${i.client} ${i.number} ${i.ref} ${i.designation}`).includes(q)),
     );
     const { key, dir } = sort;
     return filtered.sort((a, b) => {
@@ -151,7 +199,7 @@ export default function InvoiceTable({ invoices, initialMonth }: { invoices: Inv
                   <td className="px-4 py-2.5 text-slate-600">{dateFr(invoice.date)}</td>
                   <td className="px-4 py-2.5">
                     <div className="font-medium text-slate-900">{invoice.client}</div>
-                    <div className="text-xs text-slate-400">{invoice.ref}</div>
+                    <div className="text-xs text-slate-400">{invoice.designation ? `${invoice.designation} · ${invoice.ref}` : invoice.ref}</div>
                   </td>
                   <td className="px-4 py-2.5 text-right font-semibold text-slate-900">{eur(invoice.amount)}</td>
                   <td className="px-4 py-2.5 text-right text-slate-600">{eur(invoice.net)}</td>
@@ -231,9 +279,19 @@ export default function InvoiceTable({ invoices, initialMonth }: { invoices: Inv
                 </button>
               </div>
             </div>
+            <DesignationEditor
+              key={`${preview.id}:${preview.designation}`}
+              invoice={preview}
+              fallback={defaultDesignation}
+              onSaved={(designation) => {
+                setPreview({ ...preview, designation });
+                setStamp(Date.now());
+                router.refresh();
+              }}
+            />
             <iframe
-              key={preview.id}
-              src={`/api/factures/${preview.id}/pdf#view=FitH&toolbar=0`}
+              key={`${preview.id}:${stamp}`}
+              src={`/api/factures/${preview.id}/pdf?v=${stamp}#view=FitH&toolbar=0`}
               title={`Facture ${preview.number}`}
               className="w-full flex-1 bg-slate-100"
             />

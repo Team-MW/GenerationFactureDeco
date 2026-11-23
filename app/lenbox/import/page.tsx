@@ -7,8 +7,8 @@ import { DATA_DIR, OUTPUT_DIR } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
-export default function ImportPage() {
-  const { files, retentions } = getDataset();
+export default async function ImportPage() {
+  const { files, retentions } = await getDataset();
   return (
     <>
       <PageHeader title="Import des fichiers" subtitle="Une facture est créée pour chaque ligne de vente de vos fichiers" />
@@ -16,7 +16,7 @@ export default function ImportPage() {
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Dossiers surveillés" hint="Vous pouvez aussi déposer les fichiers directement dans le dossier" />
+          <CardHeader title="Dossiers locaux" hint="Utilisés sur cet ordinateur uniquement" />
           <dl className="flex flex-col gap-3 p-5 text-sm">
             {[
               ["Fichiers source (CSV / Excel)", DATA_DIR],
@@ -31,9 +31,9 @@ export default function ImportPage() {
               </div>
             ))}
             <p className="text-xs leading-relaxed text-slate-500">
-              Le dossier source est vérifié toutes les 4 secondes. Tout nouveau fichier est lu, ses factures sont numérotées et
-              leurs PDF sont écrits dans le dossier de sortie, classés par mois. Une ligne déjà importée n&apos;est jamais
-              facturée deux fois.
+              Les fichiers importés sont enregistrés en base de données : factures, numéros et statistiques sont donc
+              disponibles partout, y compris en ligne. En local, un fichier déposé directement dans le dossier source est
+              importé automatiquement. Une ligne déjà importée n&apos;est jamais facturée deux fois.
             </p>
           </dl>
         </Card>
