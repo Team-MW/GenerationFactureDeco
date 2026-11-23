@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { DATA_DIR, READ_ONLY, ensureDataDir } from "../settings";
 import { StoreError, USES_SUPABASE, rpc } from "../supabase";
-import type { Article, Db, Order, ShopId } from "./types";
+import { createCache } from "../swr";
+import type { Article, Db, Extra, Order, Payment, ShopId } from "./types";
 
 /**
  * Stockage des articles et des commandes.
@@ -44,7 +45,7 @@ interface OrderRow {
   geo: Order["geo"];
   history: Order["history"];
   /** Champs ajoutés après coup, regroupés pour éviter une migration à chaque évolution. */
-  extra: { shop?: ShopId; observations?: string; paid?: number } | null;
+  extra: { shop?: ShopId; observations?: string; paid?: number; time?: string; payments?: Payment[]; extras?: Extra[] } | null;
 }
 
 const articleFromRow = (r: ArticleRow): Article => ({
@@ -72,12 +73,15 @@ const orderFromRow = (r: OrderRow): Order => ({
   shop: r.extra?.shop ?? "toulouse",
   observations: r.extra?.observations ?? "",
   paid: Number(r.extra?.paid ?? 0),
+  payments: r.extra?.payments ?? [],
+  extras: r.extra?.extras ?? [],
   customer: { ...r.customer, email: r.customer.email ?? "" },
   lines: r.lines,
   discount: r.discount,
   delivery: r.delivery,
   scheduledDate: r.scheduled_date,
   slot: r.slot,
+  time: r.extra?.time ?? "",
   prepared: r.prepared,
   preparedAt: r.prepared_at,
   reminded: r.reminded,
@@ -104,7 +108,7 @@ const orderToRow = (o: Order): OrderRow => ({
   done_at: o.doneAt,
   geo: o.geo,
   history: o.history,
-  extra: { shop: o.shop, observations: o.observations, paid: o.paid },
+  extra: { shop: o.shop, observations: o.observations, paid: o.paid, time: o.time, payments: o.payments, extras: o.extras },
 });
 
 async function loadRemote(): Promise<{ db: Db; version: number }> {
@@ -121,6 +125,9 @@ async function loadRemote(): Promise<{ db: Db; version: number }> {
 }
 
 /** Lit, modifie, puis enregistre uniquement ce qui a changé. Recommence si un autre enregistrement est passé entre-temps. */
+// Lectures : valeur de moins de 4 s servie telle quelle ; jusqu'à 20 s, servie puis rafraîchie derrière.
+const remoteCache = createCache("gestion", loadRemote, 4000, 20000);
+
 async function mutateRemote<T>(change: (db: Db) => T | Promise<T>): Promise<T> {
   for (let attempt = 0; attempt < 6; attempt++) {
     const { db, version } = await loadRemote();
@@ -139,7 +146,11 @@ async function mutateRemote<T>(change: (db: Db) => T | Promise<T>): Promise<T> {
       p_counters: db.counters,
       p_depot: db.depot,
     });
-    if (saved === true) return result;
+    if (saved === true) {
+      // La page qui se recharge après l'action retrouve ces données sans nouvel appel à la base.
+      remoteCache.set({ db: structuredClone(db), version: version + 1 });
+      return result;
+    }
     // Conflit : quelqu'un d'autre vient d'enregistrer. On repart des données fraîches.
     await new Promise((resolve) => setTimeout(resolve, 40 + Math.random() * 120));
   }
@@ -164,6 +175,9 @@ function loadFile(): Db {
       order.shop ??= "toulouse";
       order.observations ??= "";
       order.paid ??= 0;
+      order.time ??= "";
+      order.payments ??= [];
+      order.extras ??= [];
       order.customer.email ??= "";
     }
     return db;
@@ -189,7 +203,8 @@ async function mutateFile<T>(change: (db: Db) => T | Promise<T>): Promise<T> {
 /* ───────────────────────── Interface commune ───────────────────────── */
 
 export async function loadDb(): Promise<Db> {
-  return USES_SUPABASE ? (await loadRemote()).db : loadFile();
+  // Copie : une page ne doit jamais pouvoir modifier la valeur gardée en cache.
+  return USES_SUPABASE ? structuredClone((await remoteCache.read()).db) : loadFile();
 }
 
 /** Applique une modification de façon atomique : les écritures de ce serveur sont exécutées une par une. */

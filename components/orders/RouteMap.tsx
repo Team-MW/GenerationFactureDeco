@@ -18,6 +18,9 @@ export interface MapPoint {
 export default function RouteMap({ points, route }: { points: MapPoint[]; route: [number, number][] | null }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<LeafletMap | null>(null);
+  // La carte n'est redessinée (et recadrée) que si les points ou le tracé changent vraiment,
+  // pas à chaque rafraîchissement automatique de la page.
+  const signature = JSON.stringify([points, route?.length ?? 0]);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,7 +61,8 @@ export default function RouteMap({ points, route }: { points: MapPoint[]; route:
     return () => {
       cancelled = true;
     };
-  }, [points, route]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature]);
 
   useEffect(
     () => () => {

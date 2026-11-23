@@ -3,7 +3,7 @@
 import { Check, Hourglass, Loader2, PackageCheck, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { setPrepared } from "@/app/commandes/actions";
-import { DELIVERY_MODES, SLOT_LABEL, dayLabel, isPickup, isStockComplete } from "@/lib/orders/logic";
+import { DELIVERY_MODES, timeLabel, dayLabel, isPickup, isStockComplete } from "@/lib/orders/logic";
 import type { Order } from "@/lib/orders/types";
 import { Card, buttonPrimary, buttonSecondary } from "../ui";
 import { useAction } from "./OrderActions";
@@ -23,7 +23,7 @@ function OrderCard({ order }: { order: Order }) {
         <div className="min-w-0">
           <div className="truncate text-base font-semibold text-slate-900">{order.customer.name}</div>
           <div className="tabular text-xs text-slate-500">
-            {order.number} · {SLOT_LABEL[order.slot]}
+            {order.number} · {timeLabel(order)}
           </div>
         </div>
         <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${isPickup(order) ? "bg-slate-200 text-slate-800" : "bg-sky-100 text-sky-800"}`}>

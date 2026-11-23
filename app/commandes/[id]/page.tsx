@@ -5,7 +5,7 @@ import OrderActions, { PaymentControl } from "@/components/orders/OrderActions";
 import { PreparedBadge, StageBadge, StockBadge, Warning } from "@/components/orders/bits";
 import { Card, CardHeader, buttonSecondary } from "@/components/ui";
 import { dateFr, eur } from "@/lib/format";
-import { DELIVERY_MODES, SHOPS, SLOT_LABEL, fullAddress, isPickup, isStockComplete, orderTotals } from "@/lib/orders/logic";
+import { DELIVERY_MODES, PAYMENT_METHODS, SHOPS, timeLabel, fullAddress, isPickup, isStockComplete, orderTotals } from "@/lib/orders/logic";
 import { loadDb } from "@/lib/orders/store";
 
 export const dynamic = "force-dynamic";
@@ -100,6 +100,15 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                   {!pickup && order.delivery.offered ? "Offerte" : eur(totals.delivery)}
                 </div>
               </li>
+              {order.extras.map((extra) => (
+                <li key={extra.id} className="flex items-center gap-3 px-4 py-3 md:px-5">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-slate-900">{extra.label}</div>
+                    <div className="tabular text-xs text-slate-500">Prestation ajoutée le {when(extra.at)}</div>
+                  </div>
+                  <div className="tabular w-24 shrink-0 text-right text-sm font-semibold text-slate-900">{eur(extra.amount)}</div>
+                </li>
+              ))}
             </ul>
             <dl className="tabular flex flex-col gap-1.5 border-t border-slate-200 bg-slate-50 px-4 py-4 text-sm md:px-5">
               <div className="flex justify-between">
@@ -116,6 +125,12 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                 <dt className="text-slate-500">Livraison</dt>
                 <dd>{!pickup && order.delivery.offered ? "Offerte" : eur(totals.delivery)}</dd>
               </div>
+              {totals.extras > 0 ? (
+                <div className="flex justify-between">
+                  <dt className="text-slate-500">Prestations ajoutées</dt>
+                  <dd>{eur(totals.extras)}</dd>
+                </div>
+              ) : null}
               <div className="mt-1 flex items-baseline justify-between border-t border-slate-200 pt-2">
                 <dt className="font-semibold text-slate-900">Total TTC</dt>
                 <dd className="text-lg font-semibold text-slate-900">{eur(totals.total)}</dd>
@@ -148,7 +163,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             <dl className="mt-4 border-t border-slate-100 pt-3 text-sm">
               <dt className="text-xs text-slate-500">{pickup ? "Retrait" : "Livraison"}</dt>
               <dd className="font-medium text-slate-900">
-                {order.scheduledDate ? `${dateFr(order.scheduledDate)} · ${SLOT_LABEL[order.slot]}` : "À programmer"}
+                {order.scheduledDate ? `${dateFr(order.scheduledDate)} · ${timeLabel(order)}` : "À programmer"}
               </dd>
               <dt className="mt-2 text-xs text-slate-500">Magasin</dt>
               <dd className="font-medium text-slate-900">{SHOPS[order.shop].label}</dd>
@@ -164,6 +179,19 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           <Card className="p-4 md:p-5">
             <h2 className="mb-3 text-sm font-semibold text-slate-900">Paiement</h2>
             <PaymentControl order={order} />
+            {order.payments.length > 0 ? (
+              <ul className="tabular mt-4 flex flex-col gap-1.5 border-t border-slate-100 pt-3 text-sm">
+                {order.payments.map((payment, index) => (
+                  <li key={index} className="flex justify-between gap-3">
+                    <span className="text-slate-600">
+                      {when(payment.at)} · {payment.by === "livreur" ? "livreur" : "magasin"}
+                      {payment.method ? ` · ${PAYMENT_METHODS[payment.method].toLowerCase()}` : ""}
+                    </span>
+                    <span className="font-medium text-slate-900">{eur(payment.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </Card>
 
           <Card className="p-4 md:p-5">

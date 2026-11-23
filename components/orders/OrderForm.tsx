@@ -7,9 +7,9 @@ import { createOrder } from "@/app/commandes/actions";
 import { toast } from "@/lib/client";
 import { eur } from "@/lib/format";
 import { DELIVERY_MODES, SHOPS, orderTotals } from "@/lib/orders/logic";
-import type { Article, DeliveryMode, OrderInput, ShopId, Slot } from "@/lib/orders/types";
+import type { Article, DeliveryMode, OrderInput, ShopId } from "@/lib/orders/types";
 import { Card, CardHeader, buttonPrimary } from "../ui";
-import { inputClass } from "./bits";
+import { MomentSelect, inputClass, parseMoment } from "./bits";
 
 interface FormLine {
   key: number;
@@ -50,7 +50,7 @@ export default function OrderForm({ articles }: { articles: Article[] }) {
   const [adjustValue, setAdjustValue] = useState("");
   const [offered, setOffered] = useState(false);
   const [date, setDate] = useState("");
-  const [slot, setSlot] = useState<Slot>("");
+  const [moment, setMoment] = useState("");
   const [saving, setSaving] = useState(false);
 
   const byId = useMemo(() => new Map(articles.map((a) => [a.id, a])), [articles]);
@@ -108,7 +108,8 @@ export default function OrderForm({ articles }: { articles: Article[] }) {
       discount: { type: discountType, value: num(discountValue) },
       delivery: { mode, adjustment, offered },
       scheduledDate: date || null,
-      slot,
+      slot: parseMoment(moment).slot,
+      time: parseMoment(moment).time,
     };
     setSaving(true);
     const result = await createOrder(input);
@@ -344,12 +345,8 @@ export default function OrderForm({ articles }: { articles: Article[] }) {
               <Field label={mode === "retrait" ? "Date de retrait (facultatif)" : "Date de livraison (facultatif)"}>
                 <input type="date" className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
               </Field>
-              <Field label="Créneau">
-                <select className={inputClass} value={slot} onChange={(e) => setSlot(e.target.value as Slot)} disabled={!date}>
-                  <option value="">Journée</option>
-                  <option value="matin">Matin</option>
-                  <option value="apres-midi">Après-midi</option>
-                </select>
+              <Field label="Heure">
+                <MomentSelect value={moment} onChange={setMoment} disabled={!date} />
               </Field>
             </div>
             {!date ? <p className="mt-2 text-xs text-slate-500">Sans date, la commande apparaîtra dans « À programmer » de l&apos;espace livraison.</p> : null}

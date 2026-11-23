@@ -1,4 +1,6 @@
-import type { DeliveryMode, Discount, Order, ShopId, Slot } from "./types";
+import type { DeliveryMode, Discount, Order, PaymentMethod, ShopId, Slot } from "./types";
+
+export const PAYMENT_METHODS: Record<Exclude<PaymentMethod, "">, string> = { especes: "Espèces", carte: "Carte bancaire", cheque: "Chèque", virement: "Virement" };
 
 /** Magasins, tels qu'ils figurent sur le bon de commande. */
 export const SHOPS: Record<ShopId, { label: string; address: string }> = {
@@ -16,6 +18,33 @@ export const DELIVERY_MODES: Record<DeliveryMode, { label: string; short: string
 
 export const SLOT_LABEL: Record<Slot, string> = { "": "Journée", matin: "Matin", "apres-midi": "Après-midi" };
 
+/** « 14:30 » → « 14h30 », « 09:00 » → « 9h ». */
+export function hourLabel(time: string): string {
+  const [h, m] = time.split(":").map(Number);
+  return `${h}h${m ? String(m).padStart(2, "0") : ""}`;
+}
+
+/** Moment prévu d'une commande : l'heure si elle est fixée, sinon la demi-journée. */
+export function timeLabel(order: Pick<Order, "slot" | "time">): string {
+  return order.time ? hourLabel(order.time) : SLOT_LABEL[order.slot];
+}
+
+/** Heure normalisée « HH:MM » (entre 00:00 et 23:59), ou chaîne vide si invalide. */
+export function cleanTime(value: unknown): string {
+  const m = String(value ?? "").match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return "";
+  const h = Number(m[1]), min = Number(m[2]);
+  return h <= 23 && min <= 59 ? `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}` : "";
+}
+
+/** Demi-journée correspondant à une heure. */
+export const slotOfTime = (time: string): Slot => (time < "12:30" ? "matin" : "apres-midi");
+
+/** Ordre de passage dans une journée : heure fixée d'abord, puis matin, journée, après-midi. */
+export function sortKey(order: Pick<Order, "slot" | "time">): string {
+  return order.time || { matin: "08:00", "": "12:29", "apres-midi": "13:00" }[order.slot];
+}
+
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export function discountAmount(subtotal: number, discount: Discount): number {
@@ -30,16 +59,17 @@ export function deliveryPrice(delivery: Order["delivery"]): number {
   return round2(Math.max(0, delivery.basePrice + delivery.adjustment));
 }
 
-export function orderTotals(order: Pick<Order, "lines" | "discount" | "delivery">) {
+export function orderTotals(order: Pick<Order, "lines" | "discount" | "delivery"> & { extras?: { amount: number }[] }) {
   const subtotal = round2(order.lines.reduce((t, l) => t + l.unitPrice * l.quantity, 0));
   const discount = discountAmount(subtotal, order.discount);
   const delivery = deliveryPrice(order.delivery);
-  const total = round2(subtotal - discount + delivery);
-  return { subtotal, discount, delivery, total, vat: round2(total - total / 1.2) };
+  const extras = round2((order.extras ?? []).reduce((t, e) => t + e.amount, 0));
+  const total = round2(subtotal - discount + delivery + extras);
+  return { subtotal, discount, delivery, extras, total, vat: round2(total - total / 1.2) };
 }
 
 /** Montant réglé et reste à payer. */
-export function orderBalance(order: Pick<Order, "lines" | "discount" | "delivery" | "paid">) {
+export function orderBalance(order: Pick<Order, "lines" | "discount" | "delivery" | "paid"> & { extras?: { amount: number }[] }) {
   const { total } = orderTotals(order);
   const paid = round2(Math.min(Math.max(0, order.paid || 0), total));
   return { total, paid, rest: round2(total - paid), settled: paid >= total };

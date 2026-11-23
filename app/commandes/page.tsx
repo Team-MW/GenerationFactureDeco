@@ -1,5 +1,6 @@
 import { ClipboardList, Plus } from "lucide-react";
 import Link from "next/link";
+import AutoRefresh from "@/components/AutoRefresh";
 import OrderList from "@/components/orders/OrderList";
 import { EmptyState } from "@/components/orders/bits";
 import { Card, PageHeader, buttonPrimary } from "@/components/ui";
@@ -15,6 +16,7 @@ export default async function OrdersPage() {
   const waiting = active.filter((o) => !isStockComplete(o)).length;
   return (
     <>
+      <AutoRefresh seconds={30} />
       <PageHeader
         title="Commandes"
         subtitle={orders.length ? `${active.length} en cours · ${active.length - waiting} en stock · ${waiting} en attente de stock` : "Bons de commande et suivi du stock"}

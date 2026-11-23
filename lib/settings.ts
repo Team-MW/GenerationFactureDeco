@@ -56,7 +56,8 @@ const cache = globalThis as unknown as {
   __settings?: { at: number; value: Settings };
   __logo?: { at: number; value: Logo | null };
 };
-const TTL = 5000;
+// Les paramètres et le logo ne changent presque jamais : 5 minutes en mémoire, vidée à chaque enregistrement.
+const TTL = 5 * 60000;
 
 /* ───────────────────────── Paramètres ───────────────────────── */
 

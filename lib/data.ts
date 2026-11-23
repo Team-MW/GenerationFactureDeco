@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { titleCase } from "./format";
 import { DATA_DIR, READ_ONLY, ensureDataDir, getSettings } from "./settings";
 import { StoreError, USES_SUPABASE, rpc } from "./supabase";
+import { createCache } from "./swr";
 import type { Dataset, Invoice, Retention, Settings, SourceFile } from "./types";
 
 /**
@@ -303,8 +304,8 @@ function seedRegistry(state: State) {
 const globals = globalThis as unknown as {
   __lenboxQueue?: Promise<unknown>;
   __lenboxMemory?: State;
-  __lenboxCache?: { at: number; state: State };
   __lenboxDisk?: string;
+  __lenboxSeen?: number;
   __lenboxDataset?: { key: string; dataset: Dataset };
 };
 
@@ -342,13 +343,11 @@ function loadLocal(): State {
   }
 }
 
+// Les données Lenbox changent rarement (un import par mois) : 30 s sans appel, puis rafraîchissement derrière.
+const remoteCache = createCache("lenbox", loadRemote, 30000, 10 * 60000);
+
 async function loadState(): Promise<State> {
-  if (!USES_SUPABASE) return loadLocal();
-  const cached = globals.__lenboxCache;
-  if (cached && Date.now() - cached.at < 3000) return cached.state;
-  const state = await loadRemote();
-  globals.__lenboxCache = { at: Date.now(), state };
-  return state;
+  return USES_SUPABASE ? remoteCache.read() : loadLocal();
 }
 
 /** Applique une modification à l'état et l'enregistre. Recommence si un autre enregistrement est passé entre-temps. */
@@ -385,7 +384,7 @@ function mutateState<T>(change: (state: State) => T): Promise<{ state: State; re
       });
       if (saved === true) {
         state.version += 1;
-        globals.__lenboxCache = { at: Date.now(), state };
+        remoteCache.set(state);
         return { state, result };
       }
       await new Promise((resolve) => setTimeout(resolve, 40 + Math.random() * 120));
@@ -509,7 +508,11 @@ export async function getVersion(): Promise<string> {
     await getDataset();
     globals.__lenboxDisk = signature;
   }
-  return String(await rpc<number>("lenbox_version"));
+  const version = Number(await rpc<number>("lenbox_version"));
+  // Un autre poste a importé ou retiré un fichier : on oublie la copie gardée en mémoire.
+  if (globals.__lenboxSeen !== undefined && globals.__lenboxSeen !== version) remoteCache.clear();
+  globals.__lenboxSeen = version;
+  return String(version);
 }
 
 export interface UploadResult {

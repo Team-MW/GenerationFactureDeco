@@ -1,6 +1,6 @@
 import { AlertTriangle, Check, Hourglass } from "lucide-react";
-import { STAGE_STYLE, isStockComplete, orderStage, stageLabel } from "@/lib/orders/logic";
-import type { Order } from "@/lib/orders/types";
+import { STAGE_STYLE, hourLabel, isStockComplete, orderStage, stageLabel } from "@/lib/orders/logic";
+import type { Order, Slot } from "@/lib/orders/types";
 
 export const inputClass =
   "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-neutral-200 md:text-sm";
@@ -53,5 +53,33 @@ export function EmptyState({ icon, title, text, children }: { icon: React.ReactN
       <p className="mt-1 max-w-sm text-sm text-slate-500">{text}</p>
       {children ? <div className="mt-5">{children}</div> : null}
     </div>
+  );
+}
+
+/** Heures proposées pour une livraison : de 7h à 20h30, par demi-heure. */
+export const TIME_OPTIONS = Array.from({ length: 28 }, (_, i) => `${String(7 + Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
+
+/** Valeur du sélecteur de moment : "" (journée), "matin", "apres-midi" ou une heure « HH:MM ». */
+export const momentOf = (order: Pick<Order, "slot" | "time">) => order.time || order.slot;
+export const parseMoment = (value: string): { slot: Slot; time: string } =>
+  value.includes(":") ? { slot: "", time: value } : { slot: value as Slot, time: "" };
+
+/** Choix du moment : demi-journée ou heure précise. */
+export function MomentSelect({ value, onChange, disabled, className = inputClass }: { value: string; onChange: (value: string) => void; disabled?: boolean; className?: string }) {
+  return (
+    <select className={className} value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} aria-label="Heure ou demi-journée">
+      <optgroup label="Sans heure précise">
+        <option value="">Journée</option>
+        <option value="matin">Matin</option>
+        <option value="apres-midi">Après-midi</option>
+      </optgroup>
+      <optgroup label="Heure précise">
+        {TIME_OPTIONS.map((time) => (
+          <option key={time} value={time}>
+            {hourLabel(time)}
+          </option>
+        ))}
+      </optgroup>
+    </select>
   );
 }

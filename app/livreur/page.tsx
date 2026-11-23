@@ -1,3 +1,4 @@
+import AutoRefresh from "@/components/AutoRefresh";
 import DriverBoard from "@/components/orders/DriverBoard";
 import SectionShell from "@/components/orders/SectionShell";
 import { isPickup, parisToday } from "@/lib/orders/logic";
@@ -15,6 +16,7 @@ export default async function DriverPage({ searchParams }: { searchParams: Promi
   const deliveries = orders.filter((o) => o.scheduledDate === date && !isPickup(o) && o.status !== "cancelled");
   return (
     <SectionShell companyName={(await getSettings()).companyName} section="Livreur" nav={[{ href: "/livreur", label: "Tournée du jour", short: "Tournée", icon: "truck" }]}>
+      <AutoRefresh />
       <DriverBoard date={date} today={today} orders={deliveries} depot={depot} />
     </SectionShell>
   );

@@ -2,7 +2,7 @@ import { Document, Page, StyleSheet, Text, View, renderToBuffer } from "@react-p
 import { dateFr } from "../format";
 import type { Settings } from "../types";
 import { CGV, TAGLINE } from "./cgv";
-import { DELIVERY_MODES, SHOPS, SLOT_LABEL, fullAddress, orderBalance, orderTotals, parisDate } from "./logic";
+import { DELIVERY_MODES, SHOPS, timeLabel, fullAddress, orderBalance, orderTotals, parisDate } from "./logic";
 import type { Order, ShopId } from "./types";
 
 /**
@@ -186,13 +186,25 @@ function OrderDocument({ order, settings }: { order: Order; settings: Settings }
               {!order.delivery.offered && order.delivery.adjustment > 0 ? <Text style={s.sub}>Dont supplément distance {money(order.delivery.adjustment)}</Text> : null}
               {!order.delivery.offered && order.delivery.adjustment < 0 ? <Text style={s.sub}>Dont remise {money(-order.delivery.adjustment)}</Text> : null}
               <Text style={s.sub}>
-                {pickup ? "Retrait" : "Livraison"} : {order.scheduledDate ? `${dateFr(order.scheduledDate)} · ${SLOT_LABEL[order.slot]}` : "date à convenir"}
+                {pickup ? "Retrait" : "Livraison"} : {order.scheduledDate ? `${dateFr(order.scheduledDate)} · ${timeLabel(order)}` : "date à convenir"}
               </Text>
               {order.customer.notes ? <Text style={s.sub}>{order.customer.notes}</Text> : null}
             </View>
             <Text style={s.cUnit}>{pickup ? " " : order.delivery.offered ? "Offert" : money(totals.delivery)}</Text>
             <Text style={[s.cTotal, s.bold]}>{pickup ? " " : order.delivery.offered ? "Offert" : money(totals.delivery)}</Text>
           </View>
+
+          {order.extras.map((extra) => (
+            <View key={extra.id} style={s.row} wrap={false}>
+              <Text style={[s.cQty, s.bold]}>1</Text>
+              <View style={s.cDesc}>
+                <Text style={s.bold}>{extra.label}</Text>
+                <Text style={s.sub}>Prestation ajoutée</Text>
+              </View>
+              <Text style={s.cUnit}>{money(extra.amount)}</Text>
+              <Text style={[s.cTotal, s.bold]}>{money(extra.amount)}</Text>
+            </View>
+          ))}
 
           {balance.settled ? (
             <View style={s.stamp}>

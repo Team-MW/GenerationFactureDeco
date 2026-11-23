@@ -4,9 +4,9 @@ import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { geocode } from "@/lib/orders/geocode";
-import { DELIVERY_MODES, fullAddress, isPickup, isStockComplete, orderTotals, parisToday } from "@/lib/orders/logic";
+import { DELIVERY_MODES, PAYMENT_METHODS, cleanTime, fullAddress, hourLabel, isPickup, isStockComplete, orderTotals, parisToday, slotOfTime } from "@/lib/orders/logic";
 import { StoreError, loadDb, mutate } from "@/lib/orders/store";
-import type { Article, Db, Order, OrderInput, Result, Slot } from "@/lib/orders/types";
+import type { Article, Db, Order, OrderInput, PaymentMethod, Result, Slot } from "@/lib/orders/types";
 import { getSettings } from "@/lib/settings";
 import { ACCESS_COOKIE, accessPassword, accessToken } from "@/lib/access";
 
@@ -211,6 +211,7 @@ export async function createOrder(input: OrderInput) {
 
       const discountType = input.discount?.type === "amount" ? "amount" : "percent";
       const scheduledDate = isDate(input.scheduledDate) ? input.scheduledDate : null;
+      const time = scheduledDate ? cleanTime(input.time) : "";
       const order: Order = {
         id: id(),
         number: `BL-${year}-${String(sequence).padStart(4, "0")}`,
@@ -218,6 +219,8 @@ export async function createOrder(input: OrderInput) {
         shop: input.shop === "paris" ? "paris" : "toulouse",
         observations: clean(input.observations, 500),
         paid: 0,
+        payments: [],
+        extras: [],
         customer,
         lines,
         discount: { type: discountType, value: Math.max(0, round2(Number(input.discount?.value) || 0)) },
@@ -228,7 +231,8 @@ export async function createOrder(input: OrderInput) {
           offered: mode !== "retrait" && Boolean(input.delivery.offered),
         },
         scheduledDate,
-        slot: scheduledDate && (input.slot === "matin" || input.slot === "apres-midi") ? input.slot : "",
+        slot: time ? slotOfTime(time) : scheduledDate && (input.slot === "matin" || input.slot === "apres-midi") ? input.slot : "",
+        time,
         prepared: false,
         preparedAt: null,
         reminded: false,
@@ -239,6 +243,7 @@ export async function createOrder(input: OrderInput) {
       };
 const { total } = orderTotals(order);
       order.paid = Math.min(total, Math.max(0, round2(Number(input.paid) || 0)));
+      if (order.paid > 0) order.payments.push({ at: now(), amount: order.paid, method: "", by: "magasin" });
       log(order, "Bon de commande créé");
       if (order.paid > 0) log(order, order.paid >= total ? "Commande réglée en totalité" : `Acompte de ${order.paid.toFixed(2).replace(".", ",")} € reçu`);
       const missing = lines.filter((l) => !l.reserved);
@@ -252,17 +257,18 @@ const { total } = orderTotals(order);
   });
 }
 
-export async function scheduleOrder(orderId: string, date: string | null, slot: Slot) {
+export async function scheduleOrder(orderId: string, date: string | null, slot: Slot, time = "") {
   return run(async () => {
     await mutate((db) => {
       const order = findOrder(db, orderId);
       if (order.status !== "active") throw new UserError("Cette commande est clôturée.");
       if (date !== null && !isDate(date)) throw new UserError("Date invalide.");
       order.scheduledDate = date;
-      order.slot = date && (slot === "matin" || slot === "apres-midi") ? slot : "";
+      order.time = date ? cleanTime(time) : "";
+      order.slot = order.time ? slotOfTime(order.time) : date && (slot === "matin" || slot === "apres-midi") ? slot : "";
       order.reminded = false;
       const what = isPickup(order) ? "Retrait" : "Livraison";
-      log(order, date ? `${what} programmé${isPickup(order) ? "" : "e"} le ${frDate(date)}` : `${what} déprogrammé${isPickup(order) ? "" : "e"}`);
+      log(order, date ? `${what} programmé${isPickup(order) ? "" : "e"} le ${frDate(date)}${order.time ? ` à ${hourLabel(order.time)}` : ""}` : `${what} déprogrammé${isPickup(order) ? "" : "e"}`);
     });
     if (date) await locate(orderId);
     return undefined;
@@ -293,8 +299,64 @@ export async function setPaid(orderId: string, amount: number) {
       if (!Number.isFinite(value) || value < 0) throw new UserError("Montant invalide.");
       const { total } = orderTotals(order);
       if (value > total) throw new UserError(`Le montant dépasse le total de la commande (${total.toFixed(2).replace(".", ",")} €).`);
+      // Le détail des encaissements suit : une hausse ajoute une ligne, une baisse repart d'une ligne unique.
+      if (value > order.paid) order.payments.push({ at: now(), amount: round2(value - order.paid), method: "", by: "magasin" });
+      else if (value < order.paid) order.payments = value > 0 ? [{ at: now(), amount: value, method: "", by: "magasin" }] : [];
       order.paid = value;
       log(order, value >= total ? "Commande réglée en totalité" : `Montant réglé : ${value.toFixed(2).replace(".", ",")} €`);
+      return undefined;
+    }),
+  );
+}
+
+const euros = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
+
+/** Encaissement par le livreur pendant sa tournée (espèces, carte, chèque…). */
+export async function collectPayment(orderId: string, amount: number, method: PaymentMethod) {
+  return run(() =>
+    mutate((db) => {
+      const order = findOrder(db, orderId);
+      if (order.status === "cancelled") throw new UserError("Cette commande est annulée.");
+      const value = round2(Number(amount));
+      if (!Number.isFinite(value) || value <= 0) throw new UserError("Montant invalide.");
+      if (!(method in PAYMENT_METHODS)) throw new UserError("Choisissez un mode de paiement.");
+      const rest = round2(orderTotals(order).total - order.paid);
+      if (value > rest) throw new UserError(`Le reste à payer n'est que de ${euros(rest)}.`);
+      order.paid = round2(order.paid + value);
+      order.payments.push({ at: now(), amount: value, method, by: "livreur" });
+      log(order, `Encaissé par le livreur : ${euros(value)} (${PAYMENT_METHODS[method as keyof typeof PAYMENT_METHODS].toLowerCase()})`);
+      return undefined;
+    }),
+  );
+}
+
+/** Prestation ajoutée sur place (montage en plus, étage supplémentaire…) : elle s'ajoute au total à payer. */
+export async function addExtra(orderId: string, label: string, amount: number) {
+  return run(() =>
+    mutate((db) => {
+      const order = findOrder(db, orderId);
+      if (order.status === "cancelled") throw new UserError("Cette commande est annulée.");
+      const text = clean(label, 120);
+      if (!text) throw new UserError("Décrivez la prestation.");
+      const value = round2(Number(amount));
+      if (!Number.isFinite(value) || value <= 0 || value > 100000) throw new UserError("Montant invalide.");
+      order.extras.push({ id: id(), label: text, amount: value, at: now() });
+      log(order, `Prestation ajoutée : ${text} (${euros(value)})`);
+      return undefined;
+    }),
+  );
+}
+
+export async function removeExtra(orderId: string, extraId: string) {
+  return run(() =>
+    mutate((db) => {
+      const order = findOrder(db, orderId);
+      const extra = order.extras.find((e) => e.id === extraId);
+      if (!extra) throw new UserError("Prestation introuvable.");
+      const totalAfter = round2(orderTotals(order).total - extra.amount);
+      if (order.paid > totalAfter) throw new UserError("Impossible : le client a déjà réglé cette prestation.");
+      order.extras = order.extras.filter((e) => e.id !== extraId);
+      log(order, `Prestation retirée : ${extra.label} (${euros(extra.amount)})`);
       return undefined;
     }),
   );

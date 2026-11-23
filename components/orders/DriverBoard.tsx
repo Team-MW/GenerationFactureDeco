@@ -1,17 +1,17 @@
 "use client";
 
-import { Check, ChevronLeft, ChevronRight, Loader2, MapPin, Navigation, Phone, Route, Truck } from "lucide-react";
+import { Banknote, Check, ChevronLeft, ChevronRight, Loader2, MapPin, Navigation, Phone, Plus, Route, Truck } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { completeOrder, locateDeliveries } from "@/app/commandes/actions";
+import { addExtra, collectPayment, completeOrder, locateDeliveries } from "@/app/commandes/actions";
 import { toast } from "@/lib/client";
 import { eur } from "@/lib/format";
-import { DELIVERY_MODES, SLOT_LABEL, addDays, dayLabel, fullAddress, isStockComplete, orderBalance } from "@/lib/orders/logic";
-import type { Depot, Order } from "@/lib/orders/types";
+import { DELIVERY_MODES, PAYMENT_METHODS, addDays, dayLabel, fullAddress, isStockComplete, orderBalance, parisDate, sortKey, timeLabel } from "@/lib/orders/logic";
+import type { Depot, Order, PaymentMethod } from "@/lib/orders/types";
 import { Card, buttonPrimary, buttonSecondary } from "../ui";
 import { useAction } from "./OrderActions";
-import { EmptyState } from "./bits";
+import { EmptyState, inputClass } from "./bits";
 import type { MapPoint } from "./RouteMap";
 
 const RouteMap = dynamic(() => import("./RouteMap"), { ssr: false, loading: () => <div className="h-72 w-full animate-pulse bg-slate-100 md:h-full md:min-h-[520px]" /> });
@@ -23,8 +23,6 @@ interface Trip {
   distanceKm: number;
   minutes: number;
 }
-
-const SLOT_RANK = { matin: 0, "": 1, "apres-midi": 2 } as const;
 
 /** Calcule la tournée la plus courte avec le service public OSRM (seules les coordonnées sont envoyées). */
 async function computeTrip(depot: Depot | null, stops: Order[]): Promise<Trip | null> {
@@ -50,10 +48,132 @@ async function computeTrip(depot: Depot | null, stops: Order[]): Promise<Trip | 
   };
 }
 
+const num = (s: string) => Number(String(s).replace(",", ".")) || 0;
+
+/** Encaissement sur place : reste à payer, règlement reçu, prestation ajoutée. */
+function Cashbox({ order }: { order: Order }) {
+  const { pending, run } = useAction();
+  const balance = orderBalance(order);
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState<PaymentMethod>("especes");
+  const [adding, setAdding] = useState(false);
+  const [label, setLabel] = useState("");
+  const [price, setPrice] = useState("");
+  const collected = order.payments.filter((p) => p.by === "livreur");
+  const value = amount === "" ? balance.rest : num(amount);
+
+  return (
+    <div className="mt-3 rounded-lg border border-slate-200 p-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-sm font-medium text-slate-700">{balance.settled ? "Commande payée" : "À encaisser"}</span>
+        <span className={`tabular text-lg font-semibold ${balance.settled ? "text-emerald-700" : "text-slate-900"}`}>{balance.settled ? "0,00 €" : eur(balance.rest)}</span>
+      </div>
+      <div className="tabular mt-0.5 text-xs text-slate-500">
+        Total {eur(balance.total)} · déjà réglé {eur(balance.paid)}
+      </div>
+
+      {order.extras.length > 0 ? (
+        <ul className="tabular mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2 text-sm text-slate-700">
+          {order.extras.map((extra) => (
+            <li key={extra.id} className="flex justify-between gap-3">
+              <span className="min-w-0 truncate">+ {extra.label}</span>
+              <span className="shrink-0 font-medium">{eur(extra.amount)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {collected.length > 0 ? (
+        <ul className="tabular mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2 text-sm text-emerald-800">
+          {collected.map((payment, index) => (
+            <li key={index} className="flex justify-between gap-3">
+              <span>Encaissé · {payment.method ? PAYMENT_METHODS[payment.method] : "—"}</span>
+              <span className="font-medium">{eur(payment.amount)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {order.status !== "cancelled" && !balance.settled ? (
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+          <label>
+            <span className="mb-1 block text-xs font-medium text-slate-700">Montant reçu (€)</span>
+            <input className={inputClass} inputMode="decimal" placeholder={String(balance.rest).replace(".", ",")} value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </label>
+          <label>
+            <span className="mb-1 block text-xs font-medium text-slate-700">Mode</span>
+            <select className={inputClass} value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>
+              {Object.entries(PAYMENT_METHODS).map(([key, text]) => (
+                <option key={key} value={key}>
+                  {text}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            disabled={pending || value <= 0}
+            onClick={() =>
+              run(async () => {
+                const result = await collectPayment(order.id, value, method);
+                if (result.ok) setAmount("");
+                return result;
+              }, `${eur(value)} encaissés`)
+            }
+            className={`${buttonPrimary} col-span-2 mt-auto h-[42px] justify-center sm:col-span-1 md:h-[38px]`}
+          >
+            {pending ? <Loader2 size={16} className="animate-spin" /> : <Banknote size={16} />} Encaisser
+          </button>
+        </div>
+      ) : null}
+
+      {order.status !== "cancelled" ? (
+        adding ? (
+          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 sm:grid-cols-[2fr_1fr_auto]">
+            <label className="col-span-2 sm:col-span-1">
+              <span className="mb-1 block text-xs font-medium text-slate-700">Prestation ajoutée sur place</span>
+              <input className={inputClass} placeholder="Ex. : montage d'une armoire en plus" value={label} onChange={(e) => setLabel(e.target.value)} autoFocus />
+            </label>
+            <label>
+              <span className="mb-1 block text-xs font-medium text-slate-700">Prix (€)</span>
+              <input className={inputClass} inputMode="decimal" placeholder="0" value={price} onChange={(e) => setPrice(e.target.value)} />
+            </label>
+            <div className="mt-auto flex gap-2">
+              <button
+                type="button"
+                disabled={pending || !label.trim() || num(price) <= 0}
+                onClick={() =>
+                  run(async () => {
+                    const result = await addExtra(order.id, label, num(price));
+                    if (result.ok) {
+                      setLabel("");
+                      setPrice("");
+                      setAdding(false);
+                    }
+                    return result;
+                  }, "Prestation ajoutée au total")
+                }
+                className={`${buttonPrimary} h-[42px] md:h-[38px]`}
+              >
+                Ajouter
+              </button>
+              <button type="button" onClick={() => setAdding(false)} className={`${buttonSecondary} h-[42px] md:h-[38px]`}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setAdding(true)} className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-slate-700 underline-offset-2 hover:underline">
+            <Plus size={15} /> Ajouter une prestation non facturée
+          </button>
+        )
+      ) : null}
+    </div>
+  );
+}
+
 function Stop({ order, index }: { order: Order; index: number }) {
   const { pending, run } = useAction();
   const done = order.status === "done";
-  const balance = orderBalance(order);
   const address = fullAddress(order);
   const destination = order.geo ? `${order.geo.lat},${order.geo.lon}` : encodeURIComponent(address);
   return (
@@ -71,7 +191,7 @@ function Stop({ order, index }: { order: Order; index: number }) {
             <MapPin size={15} className="mt-0.5 shrink-0 text-slate-400" /> {address || "Adresse non renseignée"}
           </div>
           <div className="tabular mt-0.5 text-xs text-slate-500">
-            {order.number} · {SLOT_LABEL[order.slot]}
+            {order.number} · {timeLabel(order)}
           </div>
         </div>
       </div>
@@ -84,9 +204,7 @@ function Stop({ order, index }: { order: Order; index: number }) {
         ))}
       </ul>
       {order.customer.notes ? <p className="mt-2 text-sm text-slate-600">Note : {order.customer.notes}</p> : null}
-      <p className={`tabular mt-2 rounded-lg px-3 py-2 text-sm font-semibold ${balance.settled ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>
-        {balance.settled ? "Commande déjà payée : rien à encaisser" : `À encaisser à la livraison : ${eur(balance.rest)}`}
-      </p>
+      <Cashbox order={order} />
       {!order.geo && address ? <p className="mt-2 text-xs text-amber-800">Adresse non localisée sur la carte : vérifiez-la dans la commande.</p> : null}
       {!order.prepared && !done ? <p className="mt-2 text-xs text-amber-800">Commande pas encore préparée par le magasin.</p> : null}
 
@@ -142,7 +260,7 @@ export default function DriverBoard({ date, today, orders, depot }: { date: stri
       const rank = new Map(trip.order.map((id, i) => [id, i]));
       return [...orders].sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999));
     }
-    return [...orders].sort((a, b) => SLOT_RANK[a.slot] - SLOT_RANK[b.slot] || a.customer.postalCode.localeCompare(b.customer.postalCode));
+    return [...orders].sort((a, b) => sortKey(a).localeCompare(sortKey(b)) || a.customer.postalCode.localeCompare(b.customer.postalCode));
   }, [orders, trip]);
 
   const points: MapPoint[] = useMemo(
@@ -169,6 +287,20 @@ export default function DriverBoard({ date, today, orders, depot }: { date: stri
       setBusy(false);
     }
   };
+
+  // Caisse de la tournée : ce qu'il reste à encaisser, et ce que le livreur a reçu ce jour-là.
+  const cash = useMemo(() => {
+    let due = 0, collected = 0, inCash = 0;
+    for (const order of orders) {
+      if (order.status !== "cancelled") due += orderBalance(order).rest;
+      for (const payment of order.payments) {
+        if (payment.by !== "livreur" || parisDate(payment.at) !== date) continue;
+        collected += payment.amount;
+        if (payment.method === "especes") inCash += payment.amount;
+      }
+    }
+    return { due: Math.round(due * 100) / 100, collected: Math.round(collected * 100) / 100, cash: Math.round(inCash * 100) / 100 };
+  }, [orders, date]);
 
   const go = (target: string) => router.push(`/livreur?date=${target}`);
   const remaining = orders.filter((o) => o.status === "active").length;
@@ -200,6 +332,23 @@ export default function DriverBoard({ date, today, orders, depot }: { date: stri
           {busy ? <Loader2 size={16} className="animate-spin" /> : <Route size={16} />} Optimiser la tournée
         </button>
       </div>
+
+      {orders.length > 0 ? (
+        <Card className="tabular mb-4 grid grid-cols-3 divide-x divide-slate-100 text-center">
+          <div className="px-2 py-3">
+            <div className="text-[11px] uppercase tracking-wide text-slate-500">Reste à encaisser</div>
+            <div className="mt-0.5 text-lg font-semibold text-slate-900">{eur(cash.due)}</div>
+          </div>
+          <div className="px-2 py-3">
+            <div className="text-[11px] uppercase tracking-wide text-slate-500">Encaissé en tournée</div>
+            <div className="mt-0.5 text-lg font-semibold text-emerald-700">{eur(cash.collected)}</div>
+          </div>
+          <div className="px-2 py-3">
+            <div className="text-[11px] uppercase tracking-wide text-slate-500">Dont espèces</div>
+            <div className="mt-0.5 text-lg font-semibold text-slate-900">{eur(cash.cash)}</div>
+          </div>
+        </Card>
+      ) : null}
 
       {orders.length === 0 ? (
         <Card>

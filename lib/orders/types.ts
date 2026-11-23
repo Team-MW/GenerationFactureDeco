@@ -25,6 +25,24 @@ export interface OrderLine {
   reserved: boolean;
 }
 
+/** Prestation ajoutée après coup (ex. par le livreur sur place) et qui s'ajoute au total. */
+export interface Extra {
+  id: string;
+  label: string;
+  amount: number;
+  at: string;
+}
+
+export type PaymentMethod = "especes" | "carte" | "cheque" | "virement" | "";
+
+/** Un encaissement : acompte au magasin, ou règlement reçu par le livreur. */
+export interface Payment {
+  at: string;
+  amount: number;
+  method: PaymentMethod;
+  by: "magasin" | "livreur";
+}
+
 export interface Discount {
   type: "percent" | "amount";
   value: number;
@@ -64,9 +82,15 @@ export interface Order {
   observations: string;
   /** Montant déjà réglé par le client (acompte ou totalité), en euros. */
   paid: number;
+  /** Détail des encaissements (leur somme vaut `paid`). */
+  payments: Payment[];
+  /** Prestations ajoutées après la commande. */
+  extras: Extra[];
   /** Date de livraison ou de retrait (AAAA-MM-JJ), null = à programmer. */
   scheduledDate: string | null;
   slot: Slot;
+  /** Heure prévue (HH:MM), vide si seule la demi-journée est connue. */
+  time: string;
   prepared: boolean;
   preparedAt: string | null;
   /** Le client a été prévenu de la livraison (rappel). */
@@ -108,6 +132,8 @@ export interface OrderInput {
   delivery: { mode: DeliveryMode; adjustment: number; offered: boolean };
   scheduledDate: string | null;
   slot: Slot;
+  /** Heure prévue (HH:MM), facultative. */
+  time?: string;
 }
 
 export type Result<T = undefined> = { ok: true; data: T } | { ok: false; error: string };

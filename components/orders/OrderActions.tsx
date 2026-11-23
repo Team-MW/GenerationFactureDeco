@@ -7,9 +7,9 @@ import { cancelOrder, completeOrder, scheduleOrder, setPaid, setPrepared } from 
 import { eur } from "@/lib/format";
 import { toast } from "@/lib/client";
 import { isPickup, isStockComplete, orderBalance } from "@/lib/orders/logic";
-import type { Order, Result, Slot } from "@/lib/orders/types";
+import type { Order, Result } from "@/lib/orders/types";
 import { buttonPrimary, buttonSecondary } from "../ui";
-import { inputClass } from "./bits";
+import { MomentSelect, inputClass, momentOf, parseMoment } from "./bits";
 
 /** Lance une action serveur, affiche le résultat et rafraîchit la page. */
 export function useAction() {
@@ -29,8 +29,8 @@ export function useAction() {
 export function ScheduleControl({ order, compact = false }: { order: Order; compact?: boolean }) {
   const { pending, run } = useAction();
   const [date, setDate] = useState(order.scheduledDate ?? "");
-  const [slot, setSlot] = useState<Slot>(order.slot);
-  const changed = date !== (order.scheduledDate ?? "") || slot !== order.slot;
+  const [moment, setMoment] = useState(momentOf(order));
+  const changed = date !== (order.scheduledDate ?? "") || moment !== momentOf(order);
   const pickup = isPickup(order);
   return (
     <div className={`flex flex-wrap items-end gap-2 ${compact ? "" : "sm:flex-nowrap"}`}>
@@ -39,17 +39,13 @@ export function ScheduleControl({ order, compact = false }: { order: Order; comp
         <input type="date" className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
       </label>
       <label className="min-w-[120px] flex-1">
-        <span className="mb-1 block text-xs font-medium text-slate-700">Créneau</span>
-        <select className={inputClass} value={slot} onChange={(e) => setSlot(e.target.value as Slot)}>
-          <option value="">Journée</option>
-          <option value="matin">Matin</option>
-          <option value="apres-midi">Après-midi</option>
-        </select>
+        <span className="mb-1 block text-xs font-medium text-slate-700">Heure</span>
+        <MomentSelect value={moment} onChange={setMoment} />
       </label>
       <button
         type="button"
         disabled={pending || !date || !changed}
-        onClick={() => run(() => scheduleOrder(order.id, date, slot), pickup ? "Retrait planifié" : "Livraison programmée")}
+        onClick={() => run(() => scheduleOrder(order.id, date, parseMoment(moment).slot, parseMoment(moment).time), pickup ? "Retrait planifié" : "Livraison programmée")}
         className={`${buttonPrimary} h-[42px] justify-center md:h-[38px]`}
       >
         {pending ? <Loader2 size={16} className="animate-spin" /> : <CalendarClock size={16} />}

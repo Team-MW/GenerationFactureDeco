@@ -4,7 +4,7 @@ import { ChevronRight, Search } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { dateFr, eur } from "@/lib/format";
-import { DELIVERY_MODES, SLOT_LABEL, isStockComplete, orderTotals } from "@/lib/orders/logic";
+import { DELIVERY_MODES, timeLabel, isStockComplete, orderTotals } from "@/lib/orders/logic";
 import type { Order } from "@/lib/orders/types";
 import { Card } from "../ui";
 import { PreparedBadge, StageBadge, StockBadge, inputClass } from "./bits";
@@ -77,7 +77,7 @@ export default function OrderList({ orders }: { orders: Order[] }) {
                     </div>
                     <div className="tabular mt-0.5 truncate text-xs text-slate-500">
                       {order.number} · {DELIVERY_MODES[order.delivery.mode].short}
-                      {order.scheduledDate ? ` · ${dateFr(order.scheduledDate)} (${SLOT_LABEL[order.slot].toLowerCase()})` : ""}
+                      {order.scheduledDate ? ` · ${dateFr(order.scheduledDate)} (${timeLabel(order).toLowerCase()})` : ""}
                       {" · "}
                       {order.lines.map((l) => `${l.quantity} × ${l.name}`).join(", ")}
                     </div>
