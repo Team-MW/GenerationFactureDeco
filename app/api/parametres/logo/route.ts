@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { generateMissing } from "@/lib/generate";
-import { getLogoPath, removeLogo, saveLogo } from "@/lib/settings";
+import { READ_ONLY, getLogoPath, readOnlyResponse, removeLogo, saveLogo } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,7 @@ export function GET() {
 }
 
 export async function POST(request: Request) {
+  if (READ_ONLY) return readOnlyResponse();
   const file = (await request.formData()).get("logo");
   if (!(file instanceof File) || !TYPES[file.type]) {
     return Response.json({ error: "Image PNG ou JPEG attendue." }, { status: 400 });
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
 }
 
 export function DELETE() {
+  if (READ_ONLY) return readOnlyResponse();
   removeLogo();
   void generateMissing().catch((error) => console.error("[factures]", error));
   return Response.json({ ok: true });

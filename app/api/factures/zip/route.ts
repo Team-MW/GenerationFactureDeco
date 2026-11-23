@@ -3,6 +3,7 @@ import { getDataset } from "@/lib/data";
 import { getInvoicePdf, invoiceFileName, monthFolder } from "@/lib/generate";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 /** Archive ZIP des factures d'un mois (?mois=2026-01) ou de toutes les factures. */
 export async function GET(request: Request) {

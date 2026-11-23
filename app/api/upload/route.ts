@@ -2,13 +2,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { ACCEPTED_EXTENSIONS, getDataset } from "@/lib/data";
 import { generateMissing } from "@/lib/generate";
-import { DATA_DIR, ensureDataDir } from "@/lib/settings";
+import { DATA_DIR, READ_ONLY, ensureDataDir, readOnlyResponse } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
 const MAX_SIZE = 20 * 1024 * 1024;
 
 export async function POST(request: Request) {
+  if (READ_ONLY) return readOnlyResponse();
   const form = await request.formData();
   const uploads = form.getAll("files").filter((f): f is File => f instanceof File);
   if (uploads.length === 0) {

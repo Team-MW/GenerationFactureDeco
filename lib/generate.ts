@@ -4,7 +4,7 @@ import path from "node:path";
 import { getDataset } from "./data";
 import { MONTHS } from "./format";
 import { renderInvoicePdf } from "./pdf";
-import { OUTPUT_DIR, getLogoPath, getSettings } from "./settings";
+import { OUTPUT_DIR, READ_ONLY, getLogoPath, getSettings } from "./settings";
 import type { Invoice, Settings } from "./types";
 
 const STATE_FILE = path.join(OUTPUT_DIR, ".etat.json");
@@ -61,6 +61,8 @@ export function monthFolder(month: string): string {
 export async function getInvoicePdf(invoice: Invoice, shared?: State): Promise<Buffer> {
   const settings = getSettings();
   const logo = getLogoPath();
+  // Disque en lecture seule : le PDF est produit en mémoire, sans copie sur le disque.
+  if (READ_ONLY) return renderInvoicePdf(invoice, settings, logo);
   const key = invoiceKey(invoice, settings, logo);
   const state = shared ?? readState();
   const existing = state.done[invoice.id];
@@ -76,13 +78,18 @@ export async function getInvoicePdf(invoice: Invoice, shared?: State): Promise<B
   const buffer = await renderInvoicePdf(invoice, settings, logo);
   const relative = path.join(monthFolder(invoice.month), invoiceFileName(invoice));
   const target = path.join(OUTPUT_DIR, relative);
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  if (existing && existing.path !== relative) {
-    fs.rmSync(path.join(OUTPUT_DIR, existing.path), { force: true });
+  try {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    if (existing && existing.path !== relative) {
+      fs.rmSync(path.join(OUTPUT_DIR, existing.path), { force: true });
+    }
+    fs.writeFileSync(target, buffer);
+    state.done[invoice.id] = { path: relative, key };
+    if (!shared) writeState(state);
+  } catch (error) {
+    // La copie sur disque est un confort : son échec ne doit jamais empêcher de servir la facture.
+    console.error("[factures] PDF non enregistré sur le disque :", error);
   }
-  fs.writeFileSync(target, buffer);
-  state.done[invoice.id] = { path: relative, key };
-  if (!shared) writeState(state);
   return buffer;
 }
 
@@ -90,6 +97,7 @@ const lock = globalThis as unknown as { __factureGenerating?: Promise<number> };
 
 /** Génère sur le disque les PDF manquants ou obsolètes. Retourne le nombre de PDF écrits. */
 export function generateMissing(): Promise<number> {
+  if (READ_ONLY) return Promise.resolve(0);
   if (lock.__factureGenerating) return lock.__factureGenerating;
   const run = (async () => {
     const { invoices } = getDataset();

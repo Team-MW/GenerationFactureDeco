@@ -4,6 +4,18 @@ import type { Settings } from "./types";
 
 export const DATA_DIR = path.join(process.cwd(), "data");
 export const OUTPUT_DIR = path.join(process.cwd(), "factures");
+/**
+ * Sur Vercel (et tout hébergement « serverless »), le disque est en lecture seule :
+ * l'application lit les fichiers livrés avec le déploiement mais ne peut rien enregistrer.
+ */
+export const READ_ONLY = Boolean(process.env.VERCEL);
+export const READ_ONLY_MESSAGE =
+  "Version en ligne en lecture seule : ajoutez ou modifiez les fichiers du dossier data/ dans le projet, puis redéployez.";
+
+export function readOnlyResponse(): Response {
+  return Response.json({ error: READ_ONLY_MESSAGE }, { status: 503 });
+}
+
 const SETTINGS_FILE = path.join(DATA_DIR, "parametres.json");
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -32,6 +44,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 export function ensureDataDir() {
+  if (READ_ONLY) return;
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 

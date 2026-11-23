@@ -4,6 +4,8 @@
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  // Hébergement en lecture seule (Vercel) : pas de dossier à surveiller ni de PDF à écrire.
+  if (process.env.VERCEL) return;
   const g = globalThis as unknown as { __factureWatcher?: NodeJS.Timeout; __factureLastVersion?: string };
   if (g.__factureWatcher) return;
 

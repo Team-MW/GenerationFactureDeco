@@ -8,7 +8,7 @@ import type { Settings } from "@/lib/types";
 import { Card, CardHeader, buttonPrimary, buttonSecondary } from "./ui";
 
 const inputClass =
-  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-blue-100";
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 md:text-sm outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-blue-100";
 
 function Field({ label, hint, className = "", children }: { label: string; hint?: string; className?: string; children: ReactNode }) {
   return (
@@ -57,12 +57,13 @@ export default function SettingsForm({ initial, hasLogo, sampleId }: { initial: 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
       });
-      if (!response.ok) throw new Error();
-      setValues(await response.json());
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      setValues(result);
       toast("Paramètres enregistrés · factures mises à jour");
       router.refresh();
-    } catch {
-      toast("Enregistrement impossible", "error");
+    } catch (error) {
+      toast((error instanceof Error && error.message) || "Enregistrement impossible", "error");
     } finally {
       setSaving(false);
     }
@@ -84,7 +85,11 @@ export default function SettingsForm({ initial, hasLogo, sampleId }: { initial: 
   };
 
   const deleteLogo = async () => {
-    await fetch("/api/parametres/logo", { method: "DELETE" });
+    const response = await fetch("/api/parametres/logo", { method: "DELETE" });
+    if (!response.ok) {
+      toast((await response.json()).error ?? "Suppression impossible", "error");
+      return;
+    }
     setLogo(false);
     toast("Logo supprimé", "info");
   };
@@ -94,7 +99,7 @@ export default function SettingsForm({ initial, hasLogo, sampleId }: { initial: 
       <div className="flex flex-col gap-4 xl:col-span-2">
         <Card>
           <CardHeader title="Votre société" hint="Ces informations figurent sur chaque facture" />
-          <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-6">
+          <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-6 md:p-5">
             <Field label="Raison sociale" className="sm:col-span-4">
               <input {...text("companyName")} required />
             </Field>
@@ -139,7 +144,7 @@ export default function SettingsForm({ initial, hasLogo, sampleId }: { initial: 
 
         <Card>
           <CardHeader title="Contenu des factures" hint="Libellé de la prestation, TVA et mentions" />
-          <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-6">
+          <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-6 md:p-5">
             <Field label="Désignation" className="sm:col-span-4" hint="Intitulé de la ligne facturée">
               <input {...text("designation")} />
             </Field>

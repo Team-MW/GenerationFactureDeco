@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import * as XLSX from "xlsx";
 import { titleCase } from "./format";
-import { DATA_DIR, ensureDataDir, getSettings, settingsMtime } from "./settings";
+import { DATA_DIR, READ_ONLY, ensureDataDir, getSettings, settingsMtime } from "./settings";
 import type { Dataset, Invoice, Retention, SourceFile } from "./types";
 
 const REGISTRY_FILE = path.join(DATA_DIR, ".registre.json");
@@ -252,7 +252,13 @@ function build(version: string, sources: ReturnType<typeof listSourceFiles>): Da
       file: row.file,
     };
   });
-  if (registryChanged) fs.writeFileSync(REGISTRY_FILE, JSON.stringify(registry, null, 2));
+  if (registryChanged && !READ_ONLY) {
+    try {
+      fs.writeFileSync(REGISTRY_FILE, JSON.stringify(registry, null, 2));
+    } catch (error) {
+      console.error("[factures] registre des numéros non enregistré :", error);
+    }
+  }
 
   retentions.sort((a, b) => a.date.localeCompare(b.date));
   return { version, invoices, retentions, files };

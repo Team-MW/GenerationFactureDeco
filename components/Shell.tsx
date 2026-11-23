@@ -7,10 +7,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast, uploadFiles, type ToastKind } from "@/lib/client";
 
 const NAV = [
-  { href: "/", label: "Tableau de bord", icon: LayoutDashboard },
-  { href: "/factures", label: "Factures", icon: FileText },
-  { href: "/import", label: "Import des fichiers", icon: UploadCloud },
-  { href: "/parametres", label: "Paramètres", icon: Settings },
+  { href: "/", label: "Tableau de bord", short: "Accueil", icon: LayoutDashboard },
+  { href: "/factures", label: "Factures", short: "Factures", icon: FileText },
+  { href: "/import", label: "Import des fichiers", short: "Import", icon: UploadCloud },
+  { href: "/parametres", label: "Paramètres", short: "Réglages", icon: Settings },
 ];
 
 interface ToastItem {
@@ -152,15 +152,43 @@ export default function Shell({ companyName, children }: { companyName: string; 
       </aside>
 
       <div className="min-w-0 flex-1">
-        <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 md:hidden">
-          {NAV.map(({ href, label }) => (
-            <Link key={href} href={href} className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-slate-600">
-              {label}
-            </Link>
-          ))}
-        </nav>
-        <main className="mx-auto max-w-[1280px] px-4 py-6 sm:px-8 sm:py-8">{children}</main>
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 bg-white/90 px-4 py-2.5 backdrop-blur md:hidden">
+          <div className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-xs font-semibold text-white">
+            {initials || "F"}
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold leading-tight text-slate-900">{companyName}</div>
+            <div className="text-[11px] leading-tight text-slate-500">
+              {NAV.find((n) => (n.href === "/" ? pathname === "/" : pathname.startsWith(n.href)))?.label ?? "Facturation"}
+            </div>
+          </div>
+        </header>
+        <main className="mx-auto max-w-[1280px] px-4 pb-28 pt-5 sm:px-8 md:py-8">{children}</main>
       </div>
+
+      <nav
+        aria-label="Navigation principale"
+        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+      >
+        {NAV.map(({ href, short, icon: Icon }) => {
+          const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={active ? "page" : undefined}
+              className={`flex flex-col items-center gap-1 pb-2 pt-2.5 text-[11px] font-medium transition active:scale-95 ${
+                active ? "text-brand" : "text-slate-500"
+              }`}
+            >
+              <span className={`grid h-7 w-14 place-items-center rounded-full transition ${active ? "bg-brand-soft" : ""}`}>
+                <Icon size={20} strokeWidth={active ? 2.2 : 1.8} />
+              </span>
+              {short}
+            </Link>
+          );
+        })}
+      </nav>
 
       {dragging ? (
         <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center bg-ink/70 p-8 backdrop-blur-sm">
@@ -172,7 +200,7 @@ export default function Shell({ companyName, children }: { companyName: string; 
         </div>
       ) : null}
 
-      <div className="fixed bottom-5 right-5 z-50 flex w-[340px] max-w-[calc(100vw-40px)] flex-col gap-2" aria-live="polite">
+      <div className="fixed bottom-24 right-4 z-50 flex w-[340px] max-w-[calc(100vw-32px)] flex-col gap-2 md:bottom-5 md:right-5" aria-live="polite">
         {toasts.map((t) => {
           const Icon = TOAST_ICONS[t.kind];
           return (

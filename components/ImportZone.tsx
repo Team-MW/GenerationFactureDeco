@@ -36,7 +36,7 @@ export default function ImportZone({ files }: { files: SourceFile[] }) {
       toast(`${file.name} retiré`, "info");
       router.refresh();
     } else {
-      toast("Suppression impossible", "error");
+      toast((await response.json().catch(() => null))?.error ?? "Suppression impossible", "error");
     }
   };
 
@@ -46,13 +46,18 @@ export default function ImportZone({ files }: { files: SourceFile[] }) {
         type="button"
         onClick={() => input.current?.click()}
         disabled={busy}
-        className="group flex w-full flex-col items-center rounded-xl border-2 border-dashed border-slate-300 bg-white px-6 py-12 text-center transition hover:border-brand hover:bg-brand-soft"
+        className="group flex w-full flex-col items-center rounded-xl border-2 border-dashed border-slate-300 bg-white px-5 py-9 text-center transition md:px-6 md:py-12 hover:border-brand hover:bg-brand-soft"
       >
         <span className="grid h-14 w-14 place-items-center rounded-full bg-brand-soft text-brand transition group-hover:bg-white">
           {busy ? <Loader2 size={26} className="animate-spin" /> : <UploadCloud size={26} strokeWidth={1.6} />}
         </span>
         <span className="mt-4 text-base font-semibold text-slate-900">
-          {busy ? "Import en cours…" : "Glissez vos fichiers ici, ou cliquez pour les choisir"}
+          {busy ? "Import en cours…" : (
+            <>
+              <span className="md:hidden">Touchez pour choisir vos fichiers</span>
+              <span className="hidden md:inline">Glissez vos fichiers ici, ou cliquez pour les choisir</span>
+            </>
+          )}
         </span>
         <span className="mt-1 text-sm text-slate-500">
           CSV, XLSX ou XLS · plusieurs fichiers à la fois · les factures sont générées immédiatement
@@ -72,7 +77,34 @@ export default function ImportZone({ files }: { files: SourceFile[] }) {
         {files.length === 0 ? (
           <p className="px-5 py-10 text-center text-sm text-slate-500">Aucun fichier pour l&apos;instant.</p>
         ) : (
-          <div className="mt-3 overflow-x-auto">
+          <>
+          <ul className="mt-3 divide-y divide-slate-100 border-t border-slate-100 md:hidden">
+            {files.map((file) => (
+              <li key={file.name} className="flex items-center gap-3 py-3 pl-4 pr-2">
+                <FileSpreadsheet size={20} className="shrink-0 text-emerald-600" strokeWidth={1.7} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium text-slate-900">{file.name}</div>
+                  {file.error ? (
+                    <div className="mt-0.5 flex items-center gap-1 text-xs text-rose-700">
+                      <AlertTriangle size={12} /> {file.error}
+                    </div>
+                  ) : (
+                    <div className="tabular mt-0.5 text-xs text-slate-500">
+                      {file.months.map(monthLabel).join(", ") || "—"} · {file.invoices} factures · {eur(file.total)}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => remove(file)}
+                  aria-label={`Retirer ${file.name}`}
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-slate-400 active:bg-rose-50 active:text-rose-600"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 hidden overflow-x-auto md:block">
             <table className="tabular w-full text-sm">
               <thead>
                 <tr className="border-y border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -129,6 +161,7 @@ export default function ImportZone({ files }: { files: SourceFile[] }) {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Card>
     </>

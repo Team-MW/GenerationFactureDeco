@@ -23,7 +23,7 @@ function Delta({ current, previous, versus }: { current: number; previous: numbe
   const up = change >= 0;
   const Icon = up ? ArrowUpRight : ArrowDownRight;
   return (
-    <span className="flex items-center gap-1.5 text-xs text-slate-500">
+    <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-slate-500">
       <span
         className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-medium ${
           up ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
@@ -40,9 +40,9 @@ function Delta({ current, previous, versus }: { current: number; previous: numbe
 
 function Kpi({ label, value, children }: { label: string; value: string; children?: React.ReactNode }) {
   return (
-    <Card className="px-5 py-4">
-      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="tabular mt-2 text-[26px] font-semibold leading-none tracking-tight text-slate-900">{value}</div>
+    <Card className="px-4 py-3.5 md:px-5 md:py-4">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500 md:text-xs">{label}</div>
+      <div className="tabular mt-2 text-xl font-semibold md:text-[26px] leading-none tracking-tight text-slate-900">{value}</div>
       <div className="mt-3 min-h-5">{children}</div>
     </Card>
   );
@@ -124,7 +124,7 @@ export default function DashboardPage() {
         </Link>
       </PageHeader>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
         <Kpi label="Chiffre d'affaires" value={eur0(stats.revenue)}>
           {last ? (
             <Delta current={last.revenue} previous={previous?.revenue} versus={`${last.short} ${versus}`} />
@@ -143,7 +143,7 @@ export default function DashboardPage() {
         </Kpi>
       </div>
 
-      <Card className="mt-4 grid grid-cols-2 divide-slate-100 max-lg:divide-y lg:grid-cols-5 lg:divide-x">
+      <Card className="mt-3 grid grid-cols-2 divide-slate-100 md:mt-4 lg:grid-cols-5 lg:divide-x">
         <Fact label="Commissions" value={eur(stats.commission)} hint={`${pct(stats.rate)} du CA`} />
         <Fact
           label="Retenues"
@@ -212,7 +212,7 @@ export default function DashboardPage() {
         <Card className="overflow-hidden xl:col-span-2">
           <CardHeader title="Synthèse mensuelle" hint="Détail chiffré de chaque mois" />
           <div className="mt-3 overflow-x-auto">
-            <table className="tabular w-full text-sm">
+            <table className="tabular w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-y border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <th className="px-5 py-2.5 text-left font-medium">Mois</th>

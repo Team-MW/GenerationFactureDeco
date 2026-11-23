@@ -54,21 +54,21 @@ export default function InvoiceTable({ invoices, initialMonth }: { invoices: Inv
   return (
     <>
       <Card className="overflow-hidden">
-        <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-3">
-          <div className="relative min-w-[220px] flex-1">
+        <div className="grid grid-cols-2 gap-2 border-b border-slate-100 px-3 py-3 md:flex md:flex-wrap md:items-center md:gap-3 md:px-4">
+          <div className="relative col-span-2 md:min-w-[220px] md:flex-1">
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Rechercher un client, un numéro, une référence…"
-              className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-blue-100"
+              placeholder="Rechercher un client, un numéro…"
+              className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-base outline-none md:text-sm placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-blue-100"
             />
           </div>
           <select
             value={month}
             onChange={(e) => setMonth(e.target.value)}
             aria-label="Filtrer par mois"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand"
+            className="col-span-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand md:col-span-1"
           >
             <option value="">Tous les mois</option>
             {months.map((m) => (
@@ -77,15 +77,51 @@ export default function InvoiceTable({ invoices, initialMonth }: { invoices: Inv
               </option>
             ))}
           </select>
-          <a href={`/api/factures/export${suffix}`} className={buttonSecondary}>
+          <a href={`/api/factures/export${suffix}`} className={`${buttonSecondary} justify-center`}>
             <FileSpreadsheet size={16} /> Export CSV
           </a>
-          <a href={`/api/factures/zip${suffix}`} className={buttonPrimary}>
-            <Archive size={16} /> {month ? `ZIP ${monthLabel(month)}` : "Tout télécharger (ZIP)"}
+          <a href={`/api/factures/zip${suffix}`} className={`${buttonPrimary} justify-center`}>
+            <Archive size={16} />
+            <span className="md:hidden">ZIP</span>
+            <span className="hidden md:inline">{month ? `ZIP ${monthLabel(month)}` : "Tout télécharger (ZIP)"}</span>
           </a>
         </div>
 
-        <div className="overflow-x-auto">
+        <ul className="divide-y divide-slate-100 md:hidden">
+          {rows.map((invoice) => (
+            <li key={invoice.id} className="flex items-center gap-2 py-3 pl-4 pr-2 active:bg-slate-50" onClick={() => setPreview(invoice)}>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="truncate text-sm font-medium text-slate-900">{invoice.client}</span>
+                  <span className="tabular shrink-0 text-sm font-semibold text-slate-900">{eur(invoice.amount)}</span>
+                </div>
+                <div className="tabular mt-1 flex items-center justify-between gap-3 text-xs text-slate-500">
+                  <span className="truncate">
+                    {invoice.number} · {dateFr(invoice.date)}
+                  </span>
+                  {invoice.retained > 0 ? (
+                    <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-800">Retenue</span>
+                  ) : (
+                    <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">Acquittée</span>
+                  )}
+                </div>
+              </div>
+              <a
+                href={`/api/factures/${invoice.id}/pdf?telecharger`}
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Télécharger la facture ${invoice.number}`}
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-slate-400 active:bg-slate-100"
+              >
+                <Download size={18} />
+              </a>
+            </li>
+          ))}
+          {rows.length === 0 ? (
+            <li className="px-4 py-12 text-center text-sm text-slate-500">Aucune facture ne correspond à votre recherche.</li>
+          ) : null}
+        </ul>
+
+        <div className="hidden overflow-x-auto md:block">
           <table className="tabular w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -173,7 +209,7 @@ export default function InvoiceTable({ invoices, initialMonth }: { invoices: Inv
       {preview ? (
         <div className="fixed inset-0 z-40 flex justify-end bg-ink/50" onClick={() => setPreview(null)}>
           <div className="flex h-full w-full max-w-3xl flex-col bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-5">
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-slate-900">
                   {preview.number} · {preview.client}
@@ -184,7 +220,7 @@ export default function InvoiceTable({ invoices, initialMonth }: { invoices: Inv
               </div>
               <div className="flex items-center gap-2">
                 <a href={`/api/factures/${preview.id}/pdf?telecharger`} className={buttonPrimary}>
-                  <Download size={16} /> Télécharger
+                  <Download size={16} /> <span className="hidden sm:inline">Télécharger</span>
                 </a>
                 <button
                   onClick={() => setPreview(null)}
