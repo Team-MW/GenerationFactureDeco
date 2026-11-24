@@ -17,5 +17,5 @@ export default function PageSkeleton({ cards = 4, full = false }: { cards?: numb
     </div>
   );
   // « full » : pages dont l'habillage (menu) n'est pas encore affiché.
-  return full ? <div className="mx-auto min-h-dvh max-w-[1280px] px-4 py-8 sm:px-8">{body}</div> : body;
+  return full ? <div className="mx-auto min-h-full max-w-[1280px] px-4 py-8 sm:px-8">{body}</div> : body;
 }

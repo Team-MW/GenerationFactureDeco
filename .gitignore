@@ -16,3 +16,6 @@ data/.corbeille/
 
 # Document d exemple généré pour vérification
 Exemple bon de commande.pdf
+
+# Captures de la simulation (clients fictifs)
+Simulation/

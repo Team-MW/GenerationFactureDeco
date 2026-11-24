@@ -9,6 +9,7 @@ import { toast } from "@/lib/client";
 import { isPickup, isStockComplete, orderBalance } from "@/lib/orders/logic";
 import type { Order, Result } from "@/lib/orders/types";
 import { buttonPrimary, buttonSecondary } from "../ui";
+import { confirmDialog } from "../ConfirmDialog";
 import { MomentSelect, inputClass, momentOf, parseMoment } from "./bits";
 
 /** Lance une action serveur, affiche le résultat et rafraîchit la page. */
@@ -116,7 +117,7 @@ export function PaymentControl({ order }: { order: Order }) {
         </div>
       ) : null}
       {order.status !== "cancelled" && balance.paid > 0 ? (
-        <button type="button" disabled={pending} onClick={() => window.confirm("Remettre le montant réglé à zéro ?") && run(() => setPaid(order.id, 0), "Paiement remis à zéro")} className="mt-2 text-xs font-medium text-slate-500 underline hover:text-slate-900">
+        <button type="button" disabled={pending} onClick={() => void confirmDialog({ title: "Remettre le montant réglé à zéro ?", message: "Tous les encaissements enregistrés sur cette commande seront effacés.", confirmLabel: "Remettre à zéro", tone: "danger" }).then((ok) => ok && run(() => setPaid(order.id, 0), "Paiement remis à zéro"))} className="mt-2 text-xs font-medium text-slate-500 underline hover:text-slate-900">
           Corriger : remettre à zéro
         </button>
       ) : null}
@@ -153,9 +154,13 @@ export default function OrderActions({ order }: { order: Order }) {
           type="button"
           disabled={pending}
           onClick={() => {
-            if (window.confirm(`Annuler le bon ${order.number} ?\n\nLes articles réservés seront remis en stock. Cette action est définitive.`)) {
-              run(() => cancelOrder(order.id), "Commande annulée");
-            }
+            void confirmDialog({
+              title: `Annuler le bon ${order.number} ?`,
+              message: "Les articles réservés seront remis en stock. Cette action est définitive.",
+              confirmLabel: "Annuler la commande",
+              cancelLabel: "Ne pas annuler",
+              tone: "danger",
+            }).then((ok) => ok && run(() => cancelOrder(order.id), "Commande annulée"));
           }}
           className={`${buttonSecondary} justify-center text-rose-700 hover:bg-rose-50`}
         >

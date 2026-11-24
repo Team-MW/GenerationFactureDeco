@@ -11,6 +11,7 @@ import { DELIVERY_MODES, PAYMENT_METHODS, addDays, dayLabel, fullAddress, isStoc
 import type { Depot, Order, PaymentMethod } from "@/lib/orders/types";
 import { Card, buttonPrimary, buttonSecondary } from "../ui";
 import { useAction } from "./OrderActions";
+import { confirmDialog } from "../ConfirmDialog";
 import { EmptyState, inputClass } from "./bits";
 import type { MapPoint } from "./RouteMap";
 
@@ -224,7 +225,11 @@ function Stop({ order, index }: { order: Order; index: number }) {
             type="button"
             disabled={pending || !isStockComplete(order)}
             onClick={() => {
-              if (window.confirm(`Confirmer la livraison chez ${order.customer.name} ?`)) run(() => completeOrder(order.id), "Livraison confirmée");
+              void confirmDialog({
+                title: `Confirmer la livraison chez ${order.customer.name} ?`,
+                message: orderBalance(order).settled ? "La commande sera marquée livrée." : `Attention : il reste ${eur(orderBalance(order).rest)} à encaisser sur cette commande.`,
+                confirmLabel: "Oui, livrée",
+              }).then((ok) => ok && run(() => completeOrder(order.id), "Livraison confirmée"));
             }}
             className={`${buttonPrimary} col-span-2 justify-center py-2.5 sm:col-span-1`}
           >
@@ -356,7 +361,7 @@ export default function DriverBoard({ date, today, orders, depot }: { date: stri
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Card className="overflow-hidden md:sticky md:top-6 md:order-2 md:h-[calc(100dvh-140px)]">
+          <Card className="overflow-hidden md:sticky md:top-2 md:order-2 md:h-[calc(100dvh-200px)]">
             <RouteMap points={points} route={trip?.line ?? null} />
           </Card>
           <div className="flex flex-col gap-3 md:order-1">

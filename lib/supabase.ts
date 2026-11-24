@@ -63,6 +63,19 @@ export async function readValue<T>(key: string): Promise<T | null> {
   return rows?.[0]?.value ?? null;
 }
 
+/**
+ * Remplace une valeur seulement si son numéro de version (champ « version » du JSON) est celui attendu.
+ * Renvoie false si quelqu'un d'autre l'a modifiée entre-temps.
+ */
+export async function replaceValueIfVersion(key: string, expectedVersion: number, value: unknown): Promise<boolean> {
+  const rows = await request<unknown[]>(`deco_settings?key=eq.${encodeURIComponent(key)}&value->>version=eq.${expectedVersion}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ value, updated_at: new Date().toISOString() }),
+  });
+  return Array.isArray(rows) && rows.length > 0;
+}
+
 /** Écrit (crée ou remplace) une valeur de la table deco_settings. */
 export async function writeValue(key: string, value: unknown): Promise<void> {
   await request<null>("deco_settings?on_conflict=key", {

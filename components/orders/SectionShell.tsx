@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ToastKind } from "@/lib/client";
 
 const ICONS: Record<string, LucideIcon> = {
@@ -82,12 +82,17 @@ export default function SectionShell({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  // Le centre est la seule zone qui défile : on la remet en haut à chaque changement de page.
+  const scroller = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    scroller.current?.scrollTo({ top: 0 });
+  }, [pathname]);
   const isActive = (item: NavItem) => (item.exact ? pathname === item.href : pathname.startsWith(item.href));
   const current = nav.find(isActive);
 
   return (
-    <div className="flex min-h-dvh">
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col bg-black px-4 py-6 md:flex">
+    <div className="flex h-full">
+      <aside className="hidden h-full w-64 shrink-0 flex-col overflow-y-auto bg-black px-4 py-6 md:flex">
         <div className="px-3 pb-8">
           <div className="truncate text-lg font-semibold tracking-tight text-white">{companyName}</div>
           <div className="mt-0.5 text-xs font-medium uppercase tracking-[0.14em] text-neutral-500">{section}</div>
@@ -121,7 +126,7 @@ export default function SectionShell({
         </Link>
       </aside>
 
-      <div className="min-w-0 flex-1">
+      <div ref={scroller} className="min-w-0 flex-1 overflow-y-auto">
         <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 bg-white/90 px-2 py-2.5 backdrop-blur md:hidden">
           <Link href="/" aria-label="Retour à l'accueil" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-600 active:bg-slate-100">
             <ArrowLeft size={20} />

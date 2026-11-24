@@ -6,6 +6,7 @@ import { useRef, useState } from "react";
 import { toast, uploadFiles } from "@/lib/client";
 import { eur, monthLabel } from "@/lib/format";
 import type { SourceFile } from "@/lib/types";
+import { confirmDialog } from "./ConfirmDialog";
 import { Card, CardHeader } from "./ui";
 
 const size = (bytes: number) =>
@@ -26,11 +27,13 @@ export default function ImportZone({ files }: { files: SourceFile[] }) {
   };
 
   const remove = async (file: SourceFile) => {
-    const warning =
-      `Retirer « ${file.name} » ?\n\n` +
-      `Ses ${file.invoices} factures disparaîtront de l'application. ` +
-      `Vous pourrez le réimporter plus tard : les numéros de facture seront conservés.`;
-    if (!window.confirm(warning)) return;
+    const ok = await confirmDialog({
+      title: `Retirer « ${file.name} » ?`,
+      message: `Ses ${file.invoices} factures disparaîtront de l'application. Vous pourrez réimporter le fichier plus tard : les numéros de facture seront conservés.`,
+      confirmLabel: "Retirer le fichier",
+      tone: "danger",
+    });
+    if (!ok) return;
     const response = await fetch(`/api/fichiers?nom=${encodeURIComponent(file.name)}`, { method: "DELETE" });
     if (response.ok) {
       toast(`${file.name} retiré`, "info");

@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DATA_DIR, READ_ONLY, ensureDataDir } from "../settings";
-import { StoreError, USES_SUPABASE, rpc } from "../supabase";
+import { cookies } from "next/headers";
+import { StoreError, USES_SUPABASE, readValue, replaceValueIfVersion, rpc, writeValue } from "../supabase";
+import { demoDb } from "./demo";
 import { createCache } from "../swr";
 import type { Article, Db, Extra, Order, Payment, ShopId } from "./types";
 
@@ -210,15 +212,110 @@ async function mutateFile<T>(change: (db: Db) => T | Promise<T>): Promise<T> {
   return result;
 }
 
+/* ───────────────────────── Mode test ───────────────────────── */
+
+/**
+ * Le mode test travaille sur un jeu de données à part (commandes fictives), jamais mélangé aux vraies.
+ * Il s'active par un cookie posé depuis la page d'accueil : il est donc propre à chaque appareil.
+ * Stockage : une seule valeur JSON { version, db } (table deco_settings, ou fichier local).
+ */
+export type Scope = "real" | "test";
+export const TEST_COOKIE = "mode";
+
+export async function currentScope(): Promise<Scope> {
+  try {
+    return (await cookies()).get(TEST_COOKIE)?.value === "test" ? "test" : "real";
+  } catch {
+    return "real"; // hors d'une requête (tâche de fond) : toujours les vraies données
+  }
+}
+
+interface TestState {
+  version: number;
+  db: Db;
+}
+
+const TEST_KEY = "gestion_test";
+const TEST_FILE = path.join(DATA_DIR, "gestion-test.json");
+const testMemory = globalThis as unknown as { __gestionTest?: TestState };
+
+async function readTest(): Promise<TestState | null> {
+  if (USES_SUPABASE) return readValue<TestState>(TEST_KEY);
+  if (READ_ONLY) return testMemory.__gestionTest ?? null;
+  try {
+    return JSON.parse(fs.readFileSync(TEST_FILE, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/** Enregistre le jeu de test. Renvoie false si une autre modification est passée entre-temps. */
+async function writeTest(next: TestState, expectedVersion: number | null): Promise<boolean> {
+  if (USES_SUPABASE) {
+    if (expectedVersion === null) {
+      await writeValue(TEST_KEY, next);
+      return true;
+    }
+    return replaceValueIfVersion(TEST_KEY, expectedVersion, next);
+  }
+  if (READ_ONLY) {
+    testMemory.__gestionTest = next;
+    return true;
+  }
+  ensureDataDir();
+  fs.writeFileSync(`${TEST_FILE}.tmp`, JSON.stringify(next, null, 2));
+  fs.renameSync(`${TEST_FILE}.tmp`, TEST_FILE);
+  return true;
+}
+
+/** Charge le jeu de test ; le crée avec la simulation s'il n'existe pas encore. */
+async function loadTest(): Promise<TestState> {
+  const existing = await readTest();
+  if (existing?.db) return existing;
+  const fresh: TestState = { version: 1, db: demoDb() };
+  await writeTest(fresh, null);
+  return fresh;
+}
+
+const testCache = createCache("gestion-test", loadTest, 4000, 20000);
+
+async function mutateTest<T>(change: (db: Db) => T | Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const state = await loadTest();
+    const result = await change(state.db);
+    const next = { version: state.version + 1, db: state.db };
+    if (await writeTest(next, state.version)) {
+      testCache.set(structuredClone(next));
+      return result;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 40 + Math.random() * 120));
+  }
+  throw new StoreError("Trop de modifications en même temps. Réessayez.");
+}
+
+/** Remet le jeu de test à zéro : recharge la simulation, datée d'aujourd'hui. */
+export async function resetTestData(): Promise<void> {
+  const current = await readTest();
+  const next: TestState = { version: (current?.version ?? 0) + 1, db: demoDb() };
+  await writeTest(next, null);
+  testCache.set(structuredClone(next));
+}
+
 /* ───────────────────────── Interface commune ───────────────────────── */
 
 export async function loadDb(): Promise<Db> {
+  if ((await currentScope()) === "test") return structuredClone((await testCache.read()).db);
   // Copie : une page ne doit jamais pouvoir modifier la valeur gardée en cache.
   return USES_SUPABASE ? structuredClone((await remoteCache.read()).db) : loadFile();
 }
 
 /** Lecture directe en base, sans cache : pour vérifier qu'un élément introuvable n'existe vraiment pas. */
 export async function loadDbFresh(): Promise<Db> {
+  if ((await currentScope()) === "test") {
+    const fresh = await loadTest();
+    testCache.set(structuredClone(fresh));
+    return structuredClone(fresh.db);
+  }
   if (!USES_SUPABASE) return loadFile();
   const fresh = await loadRemote();
   remoteCache.set(fresh);
@@ -227,7 +324,9 @@ export async function loadDbFresh(): Promise<Db> {
 
 /** Applique une modification de façon atomique : les écritures de ce serveur sont exécutées une par une. */
 export function mutate<T>(change: (db: Db) => T | Promise<T>): Promise<T> {
-  const run = () => (USES_SUPABASE ? mutateRemote(change) : mutateFile(change));
+  // Le mode (réel ou test) est lu tout de suite, dans le contexte de la requête, avant la mise en file.
+  const start = currentScope().then((scope) => () => (scope === "test" ? mutateTest(change) : USES_SUPABASE ? mutateRemote(change) : mutateFile(change)));
+  const run = () => start.then((go) => go());
   const next = (globals.__gestionQueue ?? Promise.resolve()).then(run, run);
   globals.__gestionQueue = next.catch(() => undefined);
   return next;

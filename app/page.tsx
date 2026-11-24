@@ -2,6 +2,8 @@ import { ArrowUpRight, CreditCard, Package, PackageCheck, Truck } from "lucide-r
 import Link from "next/link";
 import { accessPassword } from "@/lib/access";
 import { getSettings } from "@/lib/settings";
+import { TestModeSwitch } from "@/components/TestMode";
+import { currentScope } from "@/lib/orders/store";
 import { logout } from "./connexion/actions";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +12,7 @@ const SPACES = [
   {
     href: "/commandes",
     title: "Gestion commandes",
-    description: "Bons de livraison, stock, calendrier des livraisons et rappels.",
+    description: "Bons de commande, stock, planning des livraisons et tableau des ventes.",
     icon: Package,
   },
   {
@@ -35,8 +37,9 @@ const SPACES = [
 
 export default async function HomePage() {
   const { companyName } = await getSettings();
+  const testMode = (await currentScope()) === "test";
   return (
-    <main className="flex min-h-dvh flex-col bg-black px-5 py-10 text-white sm:px-10">
+    <main className="flex min-h-full flex-col bg-black px-5 py-10 text-white sm:px-10">
       <header className="mx-auto w-full max-w-4xl">
         <div className="flex items-center justify-between gap-4">
           <div className="text-lg font-semibold tracking-tight">{companyName}</div>
@@ -79,6 +82,7 @@ export default async function HomePage() {
             </Link>
           ))}
         </div>
+        <TestModeSwitch active={testMode} />
       </div>
     </main>
   );
