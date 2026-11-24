@@ -6,8 +6,8 @@ import { useMemo, useState } from "react";
 import { createOrder } from "@/app/commandes/actions";
 import { toast } from "@/lib/client";
 import { eur } from "@/lib/format";
-import { DELIVERY_MODES, SHOPS, addDays, dayLabel, hourLabel, orderTotals, sortKey, timeLabel } from "@/lib/orders/logic";
-import type { Article, DeliveryMode, OrderInput, ShopId, Slot } from "@/lib/orders/types";
+import { DELIVERY_MODES, addDays, dayLabel, hourLabel, orderTotals, sortKey, timeLabel } from "@/lib/orders/logic";
+import type { Article, DeliveryMode, OrderInput, Slot } from "@/lib/orders/types";
 
 /** Livraison ou retrait déjà au planning (pour voir la charge d'une journée avant de choisir). */
 export interface AgendaItem {
@@ -48,7 +48,6 @@ export default function OrderForm({ articles, agenda, today, mailReady, testMode
   const [sendEmail, setSendEmail] = useState(true);
   const router = useRouter();
   const [customer, setCustomer] = useState({ name: "", phone: "", email: "", address: "", postalCode: "", city: "", notes: "" });
-  const [shop, setShop] = useState<ShopId>("toulouse");
   const [observations, setObservations] = useState("");
   const [deposit, setDeposit] = useState("");
   const [lines, setLines] = useState<FormLine[]>([]);
@@ -108,7 +107,7 @@ export default function OrderForm({ articles, agenda, today, mailReady, testMode
     event.preventDefault();
     if (lines.length === 0) return toast("Ajoutez au moins un article.", "error");
     const input: OrderInput = {
-      shop,
+      shop: "toulouse",
       observations,
       paid: Math.min(num(deposit), totals.total),
       customer,
@@ -145,23 +144,6 @@ export default function OrderForm({ articles, agenda, today, mailReady, testMode
         <Card>
           <CardHeader title="Client" />
           <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-6 md:p-5">
-            <Field label="Magasin" className="sm:col-span-6">
-              <div className="grid grid-cols-2 gap-2 sm:max-w-md">
-                {(Object.keys(SHOPS) as ShopId[]).map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    aria-pressed={shop === key}
-                    onClick={() => setShop(key)}
-                    className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
-                      shop === key ? "border-black bg-black text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
-                    }`}
-                  >
-                    {SHOPS[key].label.replace("DECOSHOP ", "")[0] + SHOPS[key].label.replace("DECOSHOP ", "").slice(1).toLowerCase()}
-                  </button>
-                ))}
-              </div>
-            </Field>
             <Field label="Nom et prénom" className="sm:col-span-6">
               <input {...text("name")} required />
             </Field>

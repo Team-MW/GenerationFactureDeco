@@ -67,6 +67,17 @@ export interface Customer {
   notes: string;
 }
 
+/** Signature électronique du bon de commande par le client. */
+export interface Signature {
+  at: string;
+  /** Tracé de la signature : chemin SVG dans un cadre de 600 × 200. */
+  path: string;
+  /** Adresse IP depuis laquelle le bon a été signé (élément de preuve). */
+  ip: string;
+  /** La commande telle que le client l'a signée : le bon signé est toujours imprimé à partir de cette copie. */
+  snapshot: SignedOrder;
+}
+
 export interface Order {
   id: string;
   /** Numéro du bon de commande, ex. BL-2026-0001. */
@@ -103,7 +114,13 @@ export interface Order {
   /** E-mails envoyés au client pour cette commande. */
   emails: { at: string; kind: string; to: string }[];
   history: { at: string; text: string }[];
+  /** Jeton secret du lien de signature envoyé au client (vide = pas encore de lien). */
+  signToken: string;
+  signature: Signature | null;
 }
+
+/** Ce qui est figé au moment de la signature. */
+export type SignedOrder = Omit<Order, "history" | "emails" | "signature" | "signToken" | "geo" | "geoFailed">;
 
 export interface Depot {
   address: string;

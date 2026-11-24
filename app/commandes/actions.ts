@@ -4,7 +4,8 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { geocode } from "@/lib/orders/geocode";
 import { DELIVERY_MODES, PAYMENT_METHODS, cleanTime, fullAddress, hourLabel, isPickup, isStockComplete, orderTotals, parisToday, slotOfTime } from "@/lib/orders/logic";
-import { UserError, clean, euros, id, insertOrder, isDate, frDate, log, makeArticle, now, parsePrice, round2 } from "@/lib/orders/build";
+import { UserError, clean, euros, id, insertOrder, isDate, frDate, log, makeArticle, now, parsePrice, round2, signToken } from "@/lib/orders/build";
+import { signUrl } from "@/lib/orders/signature";
 import { StoreError, currentScope, loadDb, mutate } from "@/lib/orders/store";
 import type { Article, Db, Order, OrderInput, PaymentMethod, Result, Slot } from "@/lib/orders/types";
 import { DEFAULT_SETTINGS, getSettings } from "@/lib/settings";
@@ -164,7 +165,9 @@ async function deliverEmail(orderId: string, kind: EmailKind) {
   if (!isEmail(to)) throw new UserError("L'adresse e-mail du client est invalide.");
   if ((kind === "programmation" || kind === "rappel") && !order.scheduledDate) throw new UserError("Programmez d'abord la date avant d'envoyer ce message.");
   const settings = await getSettings();
-  const mail = buildEmail(kind, order, settings);
+  // Le bon de commande part avec le lien de signature (créé ici pour les commandes plus anciennes).
+  if (kind === "bon" && !order.signToken) order.signToken = await mutate((db) => (findOrder(db, orderId).signToken ||= signToken()));
+  const mail = buildEmail(kind, order, settings, kind === "bon" ? await signUrl(order) : "");
   const attachments = kind === "bon" ? [{ filename: `Bon de commande ${order.number}.pdf`, content: await renderDeliveryNote(order, settings), contentType: "application/pdf" }] : undefined;
   await sendMail({ to, ...mail, attachments });
   await mutate((db) => {
@@ -173,6 +176,11 @@ async function deliverEmail(orderId: string, kind: EmailKind) {
     if (kind === "rappel") target.reminded = true;
     log(target, `E-mail envoyé à ${to} : ${EMAIL_KINDS[kind].label.toLowerCase()}`);
   });
+}
+
+/** Crée le lien de signature d'une commande qui n'en a pas encore (bouton de la fiche commande). */
+export async function createSignLink(orderId: string): Promise<void> {
+  await run(() => mutate((db) => void (findOrder(db, orderId).signToken ||= signToken())));
 }
 
 /** Envoi d'un message au client depuis la fiche commande ou l'espace livraison. */

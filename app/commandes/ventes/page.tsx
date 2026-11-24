@@ -117,7 +117,7 @@ export default async function SalesPage() {
     const count = byMode.get(mode) ?? 0;
     return { label: DELIVERY_MODES[mode].label, value: count, detail: `${count} · ${Math.round((count / sales.length) * 100)} %` };
   });
-  const shops = (Object.keys(SHOPS) as ShopId[]).map((id) => {
+  const shops = (Object.keys(SHOPS) as ShopId[]).filter((id) => id === "toulouse" || byShop.has(id)).map((id) => {
     const shop = byShop.get(id) ?? { count: 0, revenue: 0 };
     return { label: SHOPS[id].label, value: shop.revenue, detail: `${shop.count} commande${shop.count > 1 ? "s" : ""} · ${eur(shop.revenue)}` };
   });

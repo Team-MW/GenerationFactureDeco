@@ -1,9 +1,9 @@
-import { Document, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Page, Path, StyleSheet, Svg, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { dateFr } from "../format";
 import type { Settings } from "../types";
 import { CGV, TAGLINE } from "./cgv";
-import { DELIVERY_MODES, SHOPS, fullAddress, orderBalance, orderTotals, parisDate } from "./logic";
-import type { Order, ShopId } from "./types";
+import { DELIVERY_MODES, SHOPS, fullAddress, orderBalance, orderTotals, parisDate, signatureMatches } from "./logic";
+import type { Order } from "./types";
 
 /**
  * Bon de commande au format du carnet papier du magasin :
@@ -25,8 +25,6 @@ const s = StyleSheet.create({
   docNumber: { fontFamily: "Helvetica-Bold", fontSize: 13, color: RED, letterSpacing: 1 },
   shop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 7, paddingHorizontal: 10, marginBottom: 2 },
   shopText: { color: "#ffffff", fontSize: 9.5, marginBottom: 2 },
-  check: { width: 20, height: 16, backgroundColor: "#ffffff", alignItems: "center", justifyContent: "center" },
-  checkMark: { fontFamily: "Helvetica-Bold", fontSize: 13, lineHeight: 1 },
   date: { flexDirection: "row", justifyContent: "flex-end", gap: 6, marginBottom: 8 },
   dateLabel: { fontFamily: "Helvetica-Bold", fontSize: 12 },
   clientTitle: { fontFamily: "Helvetica-Bold", fontSize: 13, textAlign: "center", marginBottom: 4 },
@@ -60,7 +58,7 @@ const s = StyleSheet.create({
   cgvCenter: { textAlign: "center", fontSize: 8.5, marginBottom: 2.5 },
   cgvTitle: { fontFamily: "Helvetica-Bold", fontSize: 9.5, textAlign: "center", marginTop: 13, marginBottom: 4 },
   cgvLine: { textAlign: "center", fontSize: 8.5, marginBottom: 3, lineHeight: 1.35 },
-  sign: { marginTop: 26, alignSelf: "flex-end", width: 210, height: 86, borderWidth: 1.2, padding: 8 },
+  sign: { marginTop: 26, alignSelf: "flex-end", width: 210, height: 104, borderWidth: 1.2, padding: 8 },
 });
 
 const fmt = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
@@ -84,6 +82,9 @@ function Footer({ settings, accent }: { settings: Settings; accent: string }) {
   );
 }
 
+const signedAt = (iso: string) =>
+  new Date(iso).toLocaleString("fr-FR", { timeZone: "Europe/Paris", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).replace(" ", " à ");
+
 function OrderDocument({ order, settings }: { order: Order; settings: Settings }) {
   const accent = settings.accentColor;
   const blue = { color: accent };
@@ -94,6 +95,8 @@ function OrderDocument({ order, settings }: { order: Order; settings: Settings }
   const pickup = order.delivery.mode === "retrait";
   const brand = settings.companyName.toUpperCase();
   const address = fullAddress(order);
+  // La signature n'apparaît que sur le bon que le client a réellement signé.
+  const signature = order.signature && signatureMatches(order) ? order.signature : null;
 
   return (
     <Document title={`Bon de commande ${order.number}`} author={settings.companyName}>
@@ -106,15 +109,13 @@ function OrderDocument({ order, settings }: { order: Order; settings: Settings }
               <Text style={[s.docName, blue]}>BON DE COMMANDE</Text>
               <Text style={s.docNumber}>N° {order.number}</Text>
             </View>
-            {(Object.keys(SHOPS) as ShopId[]).map((key) => (
-              <View key={key} style={[s.shop, { backgroundColor: accent }]}>
-                <View>
-                  <Text style={s.shopText}>{SHOPS[key].label}</Text>
-                  <Text style={[s.shopText, { marginBottom: 0 }]}>{SHOPS[key].address}</Text>
-                </View>
-                <View style={s.check}>{order.shop === key ? <Text style={[s.checkMark, blue]}>X</Text> : null}</View>
+            {/* Un seul magasin aujourd'hui ; une ancienne commande garde l'adresse du magasin qui l'a prise. */}
+            <View style={[s.shop, { backgroundColor: accent }]}>
+              <View>
+                <Text style={s.shopText}>{SHOPS[order.shop].label}</Text>
+                <Text style={[s.shopText, { marginBottom: 0 }]}>{SHOPS[order.shop].address}</Text>
               </View>
-            ))}
+            </View>
           </View>
 
           <View style={s.right}>
@@ -238,11 +239,7 @@ function OrderDocument({ order, settings }: { order: Order; settings: Settings }
         <Text style={[s.cgvBrand, blue]}>{brand}</Text>
         <Text style={[s.tagline, blue, { textAlign: "center", marginBottom: 10 }]}>{TAGLINE}</Text>
         <Text style={[s.cgvCenter, s.bold, blue]}>CONDITIONS GÉNÉRALES DE VENTE (CGV) – SAS {brand}</Text>
-        {(Object.keys(SHOPS) as ShopId[]).map((key) => (
-          <Text key={key} style={[s.cgvCenter, blue]}>
-            ADRESSE : {SHOPS[key].address}
-          </Text>
-        ))}
+        <Text style={[s.cgvCenter, blue]}>ADRESSE : {SHOPS.toulouse.address}</Text>
         {settings.email ? <Text style={[s.cgvCenter, blue]}>E-MAIL : {settings.email.toUpperCase()}</Text> : null}
         {settings.phone ? <Text style={[s.cgvCenter, blue]}>TÉLÉPHONE : {settings.phone}</Text> : null}
         {settings.vatNumber ? <Text style={[s.cgvCenter, blue]}>NUMÉRO DE TVA : {settings.vatNumber}</Text> : null}
@@ -261,6 +258,16 @@ function OrderDocument({ order, settings }: { order: Order; settings: Settings }
         <View style={[s.sign, border]} wrap={false}>
           <Text style={[s.bold, blue, { fontSize: 9 }]}>BON POUR ACCORD</Text>
           <Text style={[s.bold, blue, { fontSize: 9 }]}>SIGNATURE CLIENT</Text>
+          {signature ? (
+            <>
+              <Svg viewBox="0 0 600 200" style={{ width: 165, height: 55, alignSelf: "center" }}>
+                <Path d={signature.path} stroke="#0f172a" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              </Svg>
+              <Text style={{ fontSize: 6.5, color: "#334155", textAlign: "center" }}>
+                Signé électroniquement par {order.customer.name} le {signedAt(signature.at)}
+              </Text>
+            </>
+          ) : null}
         </View>
 
         <Footer settings={settings} accent={accent} />

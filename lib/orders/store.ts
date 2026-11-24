@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { StoreError, USES_SUPABASE, readValue, replaceValueIfVersion, rpc, writeValue } from "../supabase";
 import { demoDb } from "./demo";
 import { createCache } from "../swr";
-import type { Article, Db, Extra, Order, Payment, ShopId } from "./types";
+import type { Article, Db, Extra, Order, Payment, ShopId, Signature } from "./types";
 
 /**
  * Stockage des articles et des commandes.
@@ -47,7 +47,7 @@ interface OrderRow {
   geo: Order["geo"];
   history: Order["history"];
   /** Champs ajoutés après coup, regroupés pour éviter une migration à chaque évolution. */
-  extra: { shop?: ShopId; observations?: string; paid?: number; time?: string; payments?: Payment[]; extras?: Extra[]; geoFailed?: boolean; emails?: Order["emails"] } | null;
+  extra: { shop?: ShopId; observations?: string; paid?: number; time?: string; payments?: Payment[]; extras?: Extra[]; geoFailed?: boolean; emails?: Order["emails"]; signToken?: string; signature?: Signature | null } | null;
 }
 
 const articleFromRow = (r: ArticleRow): Article => ({
@@ -101,6 +101,8 @@ const orderFromRow = (r: OrderRow): Order => withPayments({
   geoFailed: r.extra?.geoFailed ?? false,
   emails: r.extra?.emails ?? [],
   history: r.history ?? [],
+  signToken: r.extra?.signToken ?? "",
+  signature: r.extra?.signature ?? null,
 });
 
 const orderToRow = (o: Order): OrderRow => ({
@@ -120,7 +122,7 @@ const orderToRow = (o: Order): OrderRow => ({
   done_at: o.doneAt,
   geo: o.geo,
   history: o.history,
-  extra: { shop: o.shop, observations: o.observations, paid: o.paid, time: o.time, payments: o.payments, extras: o.extras, geoFailed: o.geoFailed ?? false, emails: o.emails },
+  extra: { shop: o.shop, observations: o.observations, paid: o.paid, time: o.time, payments: o.payments, extras: o.extras, geoFailed: o.geoFailed ?? false, emails: o.emails, signToken: o.signToken, signature: o.signature },
 });
 
 async function loadRemote(): Promise<{ db: Db; version: number }> {
@@ -191,6 +193,8 @@ function loadFile(): Db {
       order.payments ??= [];
       order.extras ??= [];
       order.emails ??= [];
+      order.signToken ??= "";
+      order.signature ??= null;
       withPayments(order);
       order.customer.email ??= "";
     }
@@ -270,11 +274,19 @@ async function writeTest(next: TestState, expectedVersion: number | null): Promi
   return true;
 }
 
+/** Commandes de test enregistrées avant l'ajout de ces champs. */
+function withDefaults(order: Order): Order {
+  order.emails ??= [];
+  order.signToken ??= "";
+  order.signature ??= null;
+  return order;
+}
+
 /** Charge le jeu de test ; le crée avec la simulation s'il n'existe pas encore. */
 async function loadTest(): Promise<TestState> {
   const existing = await readTest();
   if (existing?.db) {
-    for (const order of existing.db.orders) order.emails ??= [];
+    for (const order of existing.db.orders) withDefaults(order);
     return existing;
   }
   const fresh: TestState = { version: 1, db: demoDb() };
@@ -327,14 +339,40 @@ export async function loadDbFresh(): Promise<Db> {
   return structuredClone(fresh.db);
 }
 
-/** Applique une modification de façon atomique : les écritures de ce serveur sont exécutées une par une. */
-export function mutate<T>(change: (db: Db) => T | Promise<T>): Promise<T> {
-  // Le mode (réel ou test) est lu tout de suite, dans le contexte de la requête, avant la mise en file.
-  const start = currentScope().then((scope) => () => (scope === "test" ? mutateTest(change) : USES_SUPABASE ? mutateRemote(change) : mutateFile(change)));
+function enqueue<T>(scope: Promise<Scope>, change: (db: Db) => T | Promise<T>): Promise<T> {
+  const start = scope.then((s) => () => (s === "test" ? mutateTest(change) : USES_SUPABASE ? mutateRemote(change) : mutateFile(change)));
   const run = () => start.then((go) => go());
   const next = (globals.__gestionQueue ?? Promise.resolve()).then(run, run);
   globals.__gestionQueue = next.catch(() => undefined);
   return next;
+}
+
+/** Applique une modification de façon atomique : les écritures de ce serveur sont exécutées une par une. */
+export function mutate<T>(change: (db: Db) => T | Promise<T>): Promise<T> {
+  // Le mode (réel ou test) est lu tout de suite, dans le contexte de la requête, avant la mise en file.
+  return enqueue(currentScope(), change);
+}
+
+/* ───────────── Accès sans cookie (page publique de signature) ───────────── */
+
+/** Lit un jeu de données précis. `fresh` contourne le cache. Ne crée jamais le jeu de test. */
+export async function loadScope(scope: Scope, fresh = false): Promise<Db> {
+  if (scope === "test") {
+    const state = await readTest();
+    if (!state?.db) return empty();
+    state.db.orders.forEach(withDefaults);
+    return state.db;
+  }
+  if (!USES_SUPABASE) return loadFile();
+  if (!fresh) return structuredClone((await remoteCache.read()).db);
+  const loaded = await loadRemote();
+  remoteCache.set(loaded);
+  return structuredClone(loaded.db);
+}
+
+/** Comme mutate(), mais sur un jeu de données désigné explicitement. */
+export function mutateIn<T>(scope: Scope, change: (db: Db) => T | Promise<T>): Promise<T> {
+  return enqueue(Promise.resolve(scope), change);
 }
 
 export { StoreError, USES_SUPABASE };

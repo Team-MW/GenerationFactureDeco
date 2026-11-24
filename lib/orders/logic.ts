@@ -1,4 +1,4 @@
-import type { DeliveryMode, Discount, Order, PaymentMethod, ShopId, Slot } from "./types";
+import type { DeliveryMode, Discount, Order, PaymentMethod, ShopId, SignedOrder, Slot } from "./types";
 
 export const PAYMENT_METHODS: Record<Exclude<PaymentMethod, "">, string> = { especes: "Espèces", carte: "Carte bancaire", virement: "Virement" };
 
@@ -11,6 +11,7 @@ export const PAYMENT_SENTENCE = Object.values(PAYMENT_METHODS)
 /** Magasins, tels qu'ils figurent sur le bon de commande. */
 export const SHOPS: Record<ShopId, { label: string; address: string }> = {
   toulouse: { label: "DECOSHOP TOULOUSE", address: "3 RUE EMILE BAUDOT, 31100 TOULOUSE" },
+  // Magasin fermé : conservé uniquement pour l'affichage des anciennes commandes.
   paris: { label: "DECOSHOP PARIS", address: "RUE JEAN PIERRE TIMBAUD 78520 LIMAY" },
 };
 
@@ -155,4 +156,25 @@ export function dayLabel(date: string, today = parisToday()): string {
 export function fullAddress(order: Pick<Order, "customer">): string {
   const c = order.customer;
   return [c.address, [c.postalCode, c.city].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+}
+
+/* ───────────────────────── Signature du bon ───────────────────────── */
+
+/** Copie de la commande à figer au moment où le client signe. */
+export function snapshotOf(order: Order): SignedOrder {
+  const { history: _h, emails: _e, signature: _s, signToken: _t, geo: _g, geoFailed: _f, ...rest } = order;
+  return structuredClone(rest);
+}
+
+const signedParts = (o: Pick<Order, "lines" | "discount" | "delivery" | "extras">) =>
+  JSON.stringify([o.lines.map((l) => [l.name, l.reference, l.unitPrice, l.quantity]), o.discount, o.delivery, o.extras.map((e) => [e.label, e.amount])]);
+
+/** La commande est-elle toujours celle que le client a signée (mêmes articles, mêmes prix) ? */
+export function signatureMatches(order: Order): boolean {
+  return Boolean(order.signature) && signedParts(order) === signedParts(order.signature!.snapshot);
+}
+
+/** Le bon tel qu'il a été signé, même si la commande a changé depuis. */
+export function signedCopy(order: Order): Order {
+  return order.signature ? { ...order, ...structuredClone(order.signature.snapshot) } : order;
 }

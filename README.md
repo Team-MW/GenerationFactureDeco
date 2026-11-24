@@ -52,7 +52,9 @@ La base se prépare avec les fichiers du dossier [`DB/`](DB/README.md).
 
 ### E-mails
 
-Trois messages au client, envoyés depuis la fiche commande : bon de commande (PDF joint), date de livraison, rappel. À la création d'une commande, le bon de commande part automatiquement, accompagné du message « date de livraison » si la date est déjà fixée. Un aperçu est disponible même sans SMTP configuré.
+Trois messages au client, envoyés depuis la fiche commande : bon de commande (PDF joint), date de livraison, rappel. À la création d'une commande, le bon de commande part automatiquement, accompagné du message « date de livraison » si la date est déjà fixée.
+
+**Signature en ligne.** L'e-mail du bon de commande contient un bouton « Signer mon bon de commande ». Le client ouvre le lien (page publique `/signer/<jeton>`, sans code d'accès), signe au doigt, et le bon signé est conservé sur la fiche commande (carte « Signature du client »). Le lien utilise l'adresse du site ; la variable `APP_URL` permet de la fixer. Un aperçu est disponible même sans SMTP configuré.
 
 ### Lenbox
 

@@ -23,9 +23,11 @@ interface Content {
   lines: string[];
   /** Encadré de détails : libellé → valeur. */
   facts: [string, string][];
+  /** Bouton d'action (lien de signature du bon). */
+  action?: { label: string; url: string; hint: string };
 }
 
-function content(kind: EmailKind, order: Order, settings: Settings): Content {
+function content(kind: EmailKind, order: Order, settings: Settings, signUrl: string): Content {
   const pickup = isPickup(order);
   const balance = orderBalance(order);
   const company = settings.companyName;
@@ -45,12 +47,21 @@ function content(kind: EmailKind, order: Order, settings: Settings): Content {
   const contact = [settings.phone, settings.email].filter(Boolean).join(" · ");
   const question = contact ? `Pour toute question : ${contact}.` : "";
 
+  // Le client n'est invité à signer que si le bon ne l'est pas déjà.
+  const toSign = Boolean(signUrl) && !order.signature;
+
   switch (kind) {
     case "bon":
       return {
         subject: `Votre bon de commande ${order.number} – ${company}`,
         title: "Merci pour votre commande",
-        lines: [hello, `Nous avons bien enregistré votre commande. Vous trouverez votre bon de commande en pièce jointe de ce message.`, question],
+        lines: [
+          hello,
+          `Nous avons bien enregistré votre commande. Vous trouverez votre bon de commande en pièce jointe de ce message.`,
+          toSign ? "Merci de le signer en ligne pour valider votre commande : cela ne prend qu'une minute, depuis votre téléphone ou votre ordinateur." : "",
+          question,
+        ],
+        action: toSign ? { label: "Signer mon bon de commande", url: signUrl, hint: "Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :" } : undefined,
         facts: [["Commande", order.number], ["Articles", articles], ...place, ...(when ? ([[pickup ? "Retrait prévu" : "Livraison prévue", when]] as [string, string][]) : []), ...money],
       };
     case "programmation":
@@ -82,13 +93,13 @@ function content(kind: EmailKind, order: Order, settings: Settings): Content {
 }
 
 /** Construit l'objet, la version HTML et la version texte d'un message. */
-export function buildEmail(kind: EmailKind, order: Order, settings: Settings): { subject: string; html: string; text: string } {
-  const c = content(kind, order, settings);
+export function buildEmail(kind: EmailKind, order: Order, settings: Settings, signUrl = ""): { subject: string; html: string; text: string } {
+  const c = content(kind, order, settings, signUrl);
   const lines = c.lines.filter(Boolean);
   const accent = settings.accentColor;
   const footer = [settings.companyName, [settings.address, settings.postalCode, settings.city].filter(Boolean).join(" "), settings.phone, settings.email].filter(Boolean);
 
-  const text = [c.title.toUpperCase(), "", ...lines.flatMap((l) => [l, ""]), ...c.facts.map(([k, v]) => `${k} : ${v}`), "", "—", ...footer].join("\n");
+  const text = [c.title.toUpperCase(), "", ...lines.flatMap((l) => [l, ""]), ...(c.action ? [`${c.action.label} : ${c.action.url}`, ""] : []), ...c.facts.map(([k, v]) => `${k} : ${v}`), "", "—", ...footer].join("\n");
 
   const html = `<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(c.subject)}</title></head>
@@ -99,6 +110,8 @@ export function buildEmail(kind: EmailKind, order: Order, settings: Settings): {
 <tr><td style="padding:28px 28px 8px;">
 <h1 style="margin:0 0 16px;font-size:20px;line-height:1.3;color:#0f172a;">${escape(c.title)}</h1>
 ${lines.map((l) => `<p style="margin:0 0 12px;font-size:15px;line-height:1.55;color:#334155;">${escape(l)}</p>`).join("\n")}
+${c.action ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 6px;"><tr><td style="background:${accent};border-radius:8px;"><a href="${escape(c.action.url)}" style="display:inline-block;padding:13px 22px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;">${escape(c.action.label)}</a></td></tr></table>
+<p style="margin:0 0 12px;font-size:12px;line-height:1.5;color:#64748b;">${escape(c.action.hint)}<br><a href="${escape(c.action.url)}" style="color:#64748b;word-break:break-all;">${escape(c.action.url)}</a></p>` : ""}
 </td></tr>
 <tr><td style="padding:8px 28px 28px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">

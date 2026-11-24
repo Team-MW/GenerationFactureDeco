@@ -9,6 +9,8 @@ export async function proxy(request: NextRequest) {
 
   const { pathname, search } = request.nextUrl;
   if (pathname === "/connexion") return NextResponse.next();
+  // Page de signature du bon de commande : ouverte au client, protégée par le jeton secret du lien.
+  if (pathname.startsWith("/signer/") || pathname.startsWith("/api/signer/")) return NextResponse.next();
   if (request.cookies.get(ACCESS_COOKIE)?.value === (await accessToken(password))) return NextResponse.next();
 
   if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Accès refusé." }, { status: 401 });

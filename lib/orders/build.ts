@@ -5,6 +5,8 @@ import type { Article, Db, Order, OrderInput } from "./types";
 /** Briques communes à la création d'articles et de commandes (utilisées par les actions et par la simulation). */
 
 export const id = () => randomUUID().replace(/-/g, "").slice(0, 12);
+/** Jeton impossible à deviner pour le lien de signature. */
+export const signToken = () => randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "").slice(0, 8);
 export const now = () => new Date().toISOString();
 export const round2 = (n: number) => Math.round(n * 100) / 100;
 export const clean = (value: unknown, max = 200) => String(value ?? "").trim().slice(0, max);
@@ -124,6 +126,8 @@ export function insertOrder(db: Db, input: OrderInput, prefix: string): Order {
     geo: null,
     emails: [],
     history: [],
+    signToken: signToken(),
+    signature: null,
   };
   const { total } = orderTotals(order);
   order.paid = Math.min(total, Math.max(0, round2(Number(input.paid) || 0)));

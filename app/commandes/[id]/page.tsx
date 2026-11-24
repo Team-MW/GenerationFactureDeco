@@ -1,12 +1,13 @@
-import { ArrowLeft, Check, Download, Hourglass, MapPin, Phone } from "lucide-react";
+import { ArrowLeft, Check, CheckCircle2, Download, Hourglass, MapPin, PenLine, Phone } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { createSignLink } from "@/app/commandes/actions";
 import EmailPanel from "@/components/orders/EmailPanel";
 import OrderActions, { PaymentControl, RemoveExtraButton } from "@/components/orders/OrderActions";
 import { PreparedBadge, StageBadge, StockBadge, Warning } from "@/components/orders/bits";
 import { Card, CardHeader, buttonSecondary } from "@/components/ui";
 import { dateFr, eur } from "@/lib/format";
-import { DELIVERY_MODES, PAYMENT_METHODS, SHOPS, timeLabel, fullAddress, isPickup, isStockComplete, orderTotals } from "@/lib/orders/logic";
+import { DELIVERY_MODES, PAYMENT_METHODS, SHOPS, timeLabel, fullAddress, isPickup, isStockComplete, orderTotals, signatureMatches } from "@/lib/orders/logic";
 import { MAIL_CONFIGURED } from "@/lib/mail";
 import { currentScope, loadDb, loadDbFresh } from "@/lib/orders/store";
 
@@ -23,6 +24,9 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const mode = DELIVERY_MODES[order.delivery.mode];
   const pickup = isPickup(order);
   const address = fullAddress(order);
+  const signature = order.signature;
+  // Signé, puis articles ou prix modifiés : le bon signé reste consultable, mais ne correspond plus à la commande.
+  const signatureCurrent = signatureMatches(order);
 
   return (
     <>
@@ -182,6 +186,43 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
               ) : null}
             </dl>
           </Card>
+
+          {order.status !== "cancelled" ? (
+            <Card className="p-4 md:p-5">
+              <h2 className="mb-3 text-sm font-semibold text-slate-900">Signature du client</h2>
+              {signature ? (
+                <>
+                  <div className="flex items-center gap-2 text-sm font-medium text-emerald-700">
+                    <CheckCircle2 size={17} /> Bon signé le {when(signature.at)}
+                  </div>
+                  <svg viewBox="0 0 600 200" role="img" aria-label="Signature du client" className="mt-3 w-full rounded-lg border border-slate-200 bg-white">
+                    <path d={signature.path} fill="none" stroke="#0f172a" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  {!signatureCurrent ? (
+                    <div className="mt-3">
+                      <Warning>La commande a été modifiée après la signature : le bon signé est celui d&apos;avant la modification. Le lien de signature permet au client de signer la nouvelle version.</Warning>
+                    </div>
+                  ) : null}
+                  <a href={`/api/commandes/${order.id}/bl?signe&telecharger`} className={`${buttonSecondary} mt-3 w-full justify-center`}>
+                    <Download size={16} /> Télécharger le bon signé
+                  </a>
+                </>
+              ) : (
+                <p className="text-sm text-slate-600">Pas encore signé. Le lien de signature est envoyé au client dans l&apos;e-mail du bon de commande.</p>
+              )}
+              {signature && signatureCurrent ? null : order.signToken ? (
+                <a href={`/signer/${order.signToken}`} target="_blank" rel="noreferrer" className={`${buttonSecondary} mt-3 w-full justify-center`}>
+                  <PenLine size={16} /> Faire signer sur cet écran
+                </a>
+              ) : (
+                <form action={createSignLink.bind(null, order.id)}>
+                  <button type="submit" className={`${buttonSecondary} mt-3 w-full justify-center`}>
+                    <PenLine size={16} /> Créer le lien de signature
+                  </button>
+                </form>
+              )}
+            </Card>
+          ) : null}
 
           <Card className="p-4 md:p-5">
             <h2 className="mb-3 text-sm font-semibold text-slate-900">E-mails au client</h2>
