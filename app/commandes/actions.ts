@@ -136,13 +136,17 @@ export async function createOrder(input: OrderInput) {
       return insertOrder(db, input, scope === "test" ? "TEST" : "BL").id;
     });
     await locate(orderId);
-    // Bon de commande par e-mail dès la création, si demandé. Un échec d'envoi ne bloque jamais la commande.
+    // E-mails dès la création, si demandé : le bon de commande, et la date de livraison quand elle est déjà fixée.
+    // Un échec d'envoi ne bloque jamais la commande.
     if (input.sendEmail && scope === "real" && MAIL_CONFIGURED) {
-      try {
-        await deliverEmail(orderId, "bon");
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : "erreur inconnue";
-        await mutate((db) => log(findOrder(db, orderId), `E-mail du bon de commande non envoyé : ${reason}`)).catch(() => undefined);
+      const kinds: EmailKind[] = input.scheduledDate ? ["bon", "programmation"] : ["bon"];
+      for (const kind of kinds) {
+        try {
+          await deliverEmail(orderId, kind);
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "erreur inconnue";
+          await mutate((db) => log(findOrder(db, orderId), `E-mail « ${EMAIL_KINDS[kind].label.toLowerCase()} » non envoyé : ${reason}`)).catch(() => undefined);
+        }
       }
     }
     return orderId;

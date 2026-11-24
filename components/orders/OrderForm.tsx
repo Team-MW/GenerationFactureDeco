@@ -173,7 +173,7 @@ export default function OrderForm({ articles, agenda, today, mailReady, testMode
               {customer.email.trim() ? (
                 <label className="mt-2 flex cursor-pointer items-start gap-2 text-xs text-slate-600">
                   <input type="checkbox" className="mt-0.5 h-4 w-4 accent-black" checked={mailReady && sendEmail} disabled={!mailReady} onChange={(e) => setSendEmail(e.target.checked)} />
-                  {mailReady ? "Envoyer le bon de commande à cette adresse dès la création" : testMode ? "Mode test : aucun e-mail ne part à la création" : "Envoi par e-mail non configuré (variables SMTP) : le bon ne sera pas envoyé"}
+                  {mailReady ? "Envoyer le bon de commande (et la date de livraison si elle est fixée) à cette adresse dès la création" : testMode ? "Mode test : aucun e-mail ne part à la création" : "Envoi par e-mail non configuré (variables SMTP) : le bon ne sera pas envoyé"}
                 </label>
               ) : null}
             </Field>

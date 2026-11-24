@@ -3,14 +3,13 @@ import type { Settings } from "../types";
 import { DELIVERY_MODES, PAYMENT_SENTENCE, fullAddress, hourLabel, isPickup, orderBalance } from "./logic";
 import type { Order } from "./types";
 
-/** Les quatre messages envoyés au client autour d'une commande. */
-export type EmailKind = "bon" | "programmation" | "rappel" | "livree";
+/** Les trois messages envoyés au client autour d'une commande. */
+export type EmailKind = "bon" | "programmation" | "rappel";
 
 export const EMAIL_KINDS: Record<EmailKind, { label: string; hint: string }> = {
   bon: { label: "Bon de commande", hint: "Confirmation de commande, avec le bon en pièce jointe (PDF)" },
   programmation: { label: "Date de livraison", hint: "Annonce la date et l'heure prévues" },
   rappel: { label: "Rappel de livraison", hint: "À envoyer la veille ou le jour même" },
-  livree: { label: "Livraison effectuée", hint: "Remerciement après la livraison ou le retrait" },
 };
 
 export const isEmailKind = (value: unknown): value is EmailKind => typeof value === "string" && value in EMAIL_KINDS;
@@ -78,18 +77,6 @@ function content(kind: EmailKind, order: Order, settings: Settings): Content {
           question,
         ],
         facts: [[pickup ? "Retrait" : "Livraison", when], ...place, ["Articles", articles], ...(balance.settled ? [] : ([["Reste à payer", eur(balance.rest)]] as [string, string][]))],
-      };
-    case "livree":
-      return {
-        subject: pickup ? `Votre commande ${order.number} a été retirée – ${company}` : `Votre commande ${order.number} a été livrée – ${company}`,
-        title: "Merci de votre confiance",
-        lines: [
-          hello,
-          pickup ? `Votre commande ${order.number} a bien été retirée.` : `Votre commande ${order.number} a bien été livrée.`,
-          "Nous espérons que vos meubles vous donnent entière satisfaction. Si vous constatez la moindre anomalie, contactez-nous rapidement.",
-          question,
-        ],
-        facts: [["Commande", order.number], ["Articles", articles], ...money],
       };
   }
 }

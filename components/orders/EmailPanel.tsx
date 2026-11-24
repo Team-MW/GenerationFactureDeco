@@ -31,7 +31,7 @@ export default function EmailPanel({ order, configured, testMode }: { order: Ord
   const { pending, send } = useSendEmail();
   const [email, setEmail] = useState(order.customer.email);
   const hasEmail = Boolean(order.customer.email);
-  const kinds = (Object.keys(EMAIL_KINDS) as EmailKind[]).filter((k) => (k === "livree" ? order.status === "done" : true));
+  const kinds = Object.keys(EMAIL_KINDS) as EmailKind[];
 
   if (order.status === "cancelled") return <p className="text-sm text-slate-500">Commande annulée : aucun e-mail ne peut être envoyé.</p>;
 

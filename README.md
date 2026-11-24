@@ -52,7 +52,7 @@ La base se prépare avec les fichiers du dossier [`DB/`](DB/README.md).
 
 ### E-mails
 
-Quatre messages au client, envoyés depuis la fiche commande : bon de commande (PDF joint), date de livraison, rappel, livraison effectuée. Un aperçu est disponible même sans SMTP configuré.
+Trois messages au client, envoyés depuis la fiche commande : bon de commande (PDF joint), date de livraison, rappel. À la création d'une commande, le bon de commande part automatiquement, accompagné du message « date de livraison » si la date est déjà fixée. Un aperçu est disponible même sans SMTP configuré.
 
 ### Lenbox
 
