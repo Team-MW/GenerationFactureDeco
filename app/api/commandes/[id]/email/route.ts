@@ -1,0 +1,16 @@
+import { buildEmail, isEmailKind } from "@/lib/orders/emails";
+import { loadDb, loadDbFresh } from "@/lib/orders/store";
+import { getSettings } from "@/lib/settings";
+
+export const dynamic = "force-dynamic";
+
+/** Aperçu d'un e-mail tel que le client le recevra (rien n'est envoyé). */
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const kind = new URL(request.url).searchParams.get("type");
+  if (!isEmailKind(kind)) return new Response("Message inconnu", { status: 400 });
+  const order = (await loadDb()).orders.find((o) => o.id === id) ?? (await loadDbFresh()).orders.find((o) => o.id === id);
+  if (!order) return new Response("Commande introuvable", { status: 404 });
+  const mail = buildEmail(kind, order, await getSettings());
+  return new Response(mail.html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+}

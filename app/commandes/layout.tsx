@@ -9,6 +9,7 @@ const NAV: NavItem[] = [
   { href: "/commandes/livraisons", label: "Espace livraison", short: "Livraisons", icon: "calendar" },
   { href: "/commandes/stock", label: "Stock", short: "Stock", icon: "stock" },
   { href: "/commandes/ventes", label: "Tableau des ventes", short: "Ventes", icon: "chart" },
+  { href: "/parametres", label: "Paramètres", short: "Réglages", icon: "settings" },
 ];
 
 export default async function OrdersLayout({ children }: { children: React.ReactNode }) {

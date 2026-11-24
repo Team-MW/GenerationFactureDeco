@@ -44,7 +44,8 @@ function Field({ label, className = "", children }: { label: string; className?:
   );
 }
 
-export default function OrderForm({ articles, agenda, today }: { articles: Article[]; agenda: AgendaItem[]; today: string }) {
+export default function OrderForm({ articles, agenda, today, mailReady, testMode }: { articles: Article[]; agenda: AgendaItem[]; today: string; mailReady: boolean; testMode: boolean }) {
+  const [sendEmail, setSendEmail] = useState(true);
   const router = useRouter();
   const [customer, setCustomer] = useState({ name: "", phone: "", email: "", address: "", postalCode: "", city: "", notes: "" });
   const [shop, setShop] = useState<ShopId>("toulouse");
@@ -118,6 +119,7 @@ export default function OrderForm({ articles, agenda, today }: { articles: Artic
       ),
       discount: { type: discountType, value: num(discountValue) },
       delivery: { mode, adjustment, offered },
+      sendEmail: mailReady && sendEmail && Boolean(customer.email.trim()),
       scheduledDate: date || null,
       slot: parseMoment(moment).slot,
       time: parseMoment(moment).time,
@@ -168,6 +170,12 @@ export default function OrderForm({ articles, agenda, today }: { articles: Artic
             </Field>
             <Field label="E-mail (facultatif)" className="sm:col-span-3">
               <input {...text("email")} type="email" inputMode="email" />
+              {customer.email.trim() ? (
+                <label className="mt-2 flex cursor-pointer items-start gap-2 text-xs text-slate-600">
+                  <input type="checkbox" className="mt-0.5 h-4 w-4 accent-black" checked={mailReady && sendEmail} disabled={!mailReady} onChange={(e) => setSendEmail(e.target.checked)} />
+                  {mailReady ? "Envoyer le bon de commande à cette adresse dès la création" : testMode ? "Mode test : aucun e-mail ne part à la création" : "Envoi par e-mail non configuré (variables SMTP) : le bon ne sera pas envoyé"}
+                </label>
+              ) : null}
             </Field>
             <Field label={mode === "retrait" ? "Adresse (facultatif)" : "Adresse de livraison"} className="sm:col-span-6">
               <input {...text("address", "Numéro et rue")} required={mode !== "retrait"} />
@@ -194,6 +202,7 @@ export default function OrderForm({ articles, agenda, today }: { articles: Artic
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
                 placeholder="Rechercher un article ou saisir un nouveau nom…"
+                aria-label="Rechercher ou créer un article"
                 className={`${inputClass} pl-9`}
               />
               {query.trim() || (lines.length === 0 && articles.length > 0) ? (

@@ -10,7 +10,7 @@ import type { Dataset, Invoice, Retention, Settings, SourceFile } from "./types"
 /**
  * Données Lenbox : fichiers d'export importés, transactions et numéros de facture.
  *
- * - Avec Supabase : tout est enregistré en base (tables lenbox_*), donc utilisable en ligne.
+ * - Avec Supabase : tout est enregistré en base (tables deco_lenbox_*), donc utilisable en ligne.
  * - Sans Supabase : fichier local data/lenbox.json.
  *
  * Dans les deux cas, les fichiers CSV / Excel présents dans le dossier data/ et pas encore

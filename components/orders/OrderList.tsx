@@ -38,7 +38,7 @@ export default function OrderList({ orders }: { orders: Order[] }) {
       <div className="flex flex-col gap-3 border-b border-slate-100 px-3 py-3 md:px-4">
         <div className="relative">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher un client, un numéro, un article…" className={`${inputClass} pl-9`} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher un client, un numéro, un article…" aria-label="Rechercher une commande" className={`${inputClass} pl-9`} />
         </div>
         <div className="-mx-1 flex gap-1 overflow-x-auto px-1">
           {FILTERS.map((f) => {

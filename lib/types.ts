@@ -77,6 +77,8 @@ export interface Settings {
   paymentMethod: string;
   footerNote: string;
   accentColor: string;
+  /** Adresse de départ des tournées de livraison (dépôt). */
+  depotAddress: string;
 }
 
 export interface MonthStat {

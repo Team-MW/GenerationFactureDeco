@@ -43,6 +43,7 @@ export const DEFAULT_SETTINGS: Settings = {
   paymentMethod: "Financement",
   footerNote: "",
   accentColor: "#1d4ed8",
+  depotAddress: "60 Rue Jacques Babinet, 31100 Toulouse",
 };
 
 export function ensureDataDir() {

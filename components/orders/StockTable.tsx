@@ -99,7 +99,7 @@ function StockEntry({ article }: { article: StockRow }) {
       <button type="button" disabled={pending || !quantity} onClick={() => apply(1)} className={`${buttonPrimary} px-3`} title="Entrée de stock">
         <Plus size={16} /> <span className="hidden lg:inline">Entrée</span>
       </button>
-      <button type="button" disabled={pending || !quantity} onClick={() => apply(-1)} className={`${buttonSecondary} px-3`} title="Sortie / correction">
+      <button type="button" disabled={pending || !quantity} onClick={() => apply(-1)} className={`${buttonSecondary} px-3`} title="Sortie / correction" aria-label={`Retirer du stock de ${article.name}`}>
         −
       </button>
     </div>
@@ -123,7 +123,7 @@ export default function StockTable({ rows }: { rows: StockRow[] }) {
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-3 md:px-4">
         <div className="relative min-w-[200px] flex-1">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher un article…" className={`${inputClass} pl-9`} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher un article…" aria-label="Rechercher un article" className={`${inputClass} pl-9`} />
         </div>
         <button type="button" onClick={() => setCreating((v) => !v)} className={buttonPrimary}>
           {creating ? <X size={16} /> : <Plus size={16} />} {creating ? "Fermer" : "Nouvel article"}
@@ -133,7 +133,7 @@ export default function StockTable({ rows }: { rows: StockRow[] }) {
 
       {list.length === 0 ? (
         <p className="px-4 py-14 text-center text-sm text-slate-500">
-          {rows.length === 0 ? "Aucun article. Créez-en un ici ou directement depuis un bon de livraison." : "Aucun article ne correspond."}
+          {rows.length === 0 ? "Aucun article. Créez-en un ici ou directement depuis un bon de commande." : "Aucun article ne correspond."}
         </p>
       ) : (
         <ul className="divide-y divide-slate-100">

@@ -29,7 +29,7 @@ export default function ImportZone({ files }: { files: SourceFile[] }) {
   const remove = async (file: SourceFile) => {
     const ok = await confirmDialog({
       title: `Retirer « ${file.name} » ?`,
-      message: `Ses ${file.invoices} factures disparaîtront de l'application. Vous pourrez réimporter le fichier plus tard : les numéros de facture seront conservés.`,
+      message: `${file.invoices > 1 ? `Ses ${file.invoices} factures disparaîtront` : file.invoices === 1 ? "Sa facture disparaîtra" : "Il sera retiré"} de l'application. Vous pourrez réimporter le fichier plus tard : les numéros de facture seront conservés.`,
       confirmLabel: "Retirer le fichier",
       tone: "danger",
     });

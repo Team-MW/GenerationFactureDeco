@@ -16,11 +16,11 @@ select a.name                                                          as articl
  order by en_attente desc, a.name;
 
 -- Livraisons et retraits programmés à partir d'aujourd'hui.
-select o.scheduled_date as date, o.slot as creneau, o.number, o.customer->>'name' as client,
+select o.scheduled_date as date, coalesce(nullif(o.extra->>'time', ''), o.slot) as heure, o.number, o.customer->>'name' as client,
        o.delivery->>'mode' as formule, o.customer->>'city' as ville, o.prepared as preparee
   from public.deco_orders o
  where o.status = 'active' and o.scheduled_date >= current_date
- order by o.scheduled_date, o.slot;
+ order by o.scheduled_date, coalesce(nullif(o.extra->>'time', ''), '12:00');
 
 -- Commandes en cours sans date (à programmer ou en attente de stock).
 select o.number, o.customer->>'name' as client, o.created_at::date as creee_le,

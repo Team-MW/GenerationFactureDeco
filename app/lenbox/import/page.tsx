@@ -3,7 +3,7 @@ import ImportZone from "@/components/ImportZone";
 import { Card, CardHeader, PageHeader } from "@/components/ui";
 import { getDataset } from "@/lib/data";
 import { dateFr, eur } from "@/lib/format";
-import { DATA_DIR, OUTPUT_DIR } from "@/lib/settings";
+import { DATA_DIR, OUTPUT_DIR, READ_ONLY } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,8 @@ export default async function ImportPage() {
       <PageHeader title="Import des fichiers" subtitle="Une facture est créée pour chaque ligne de vente de vos fichiers" />
       <ImportZone files={files} />
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className={`mt-4 grid grid-cols-1 gap-4 ${READ_ONLY ? "" : "lg:grid-cols-2"}`}>
+        {READ_ONLY ? null : (
         <Card>
           <CardHeader title="Dossiers locaux" hint="Utilisés sur cet ordinateur uniquement" />
           <dl className="flex flex-col gap-3 p-5 text-sm">
@@ -37,6 +38,7 @@ export default async function ImportPage() {
             </p>
           </dl>
         </Card>
+        )}
 
         <Card className="overflow-hidden">
           <CardHeader

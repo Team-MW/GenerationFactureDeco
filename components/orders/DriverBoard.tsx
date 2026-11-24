@@ -4,10 +4,11 @@ import { Banknote, Check, ChevronLeft, ChevronRight, Loader2, MapPin, Navigation
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { addExtra, collectPayment, completeOrder, locateDeliveries } from "@/app/commandes/actions";
+import { addExtra, collectPayment, completeOrder, locateAddress, locateDeliveries } from "@/app/commandes/actions";
 import { toast } from "@/lib/client";
 import { eur } from "@/lib/format";
-import { DELIVERY_MODES, PAYMENT_METHODS, addDays, dayLabel, fullAddress, isStockComplete, orderBalance, parisDate, sortKey, timeLabel } from "@/lib/orders/logic";
+import { DELIVERY_MODES, PAYMENT_METHODS, shopName, addDays, dayLabel, fullAddress, isStockComplete, orderBalance, parisDate, sortKey, timeLabel } from "@/lib/orders/logic";
+import { solveOpenPath, solveRoundTrip } from "@/lib/orders/tour";
 import type { Depot, Order, PaymentMethod } from "@/lib/orders/types";
 import { Card, buttonPrimary, buttonSecondary } from "../ui";
 import { useAction } from "./OrderActions";
@@ -23,29 +24,45 @@ interface Trip {
   line: [number, number][];
   distanceKm: number;
   minutes: number;
+  /** true = ordre garanti le plus rapide ; false = très bonne solution approchée (beaucoup d'arrêts). */
+  exact: boolean;
 }
 
-/** Calcule la tournée la plus courte avec le service public OSRM (seules les coordonnées sont envoyées). */
+const OSRM = "https://router.project-osrm.org";
+
+/**
+ * Calcule la meilleure tournée :
+ * 1. le service OSRM donne les temps de route réels entre tous les points (seules les coordonnées sont envoyées) ;
+ * 2. l'ordre de passage est calculé ici, de façon exacte jusqu'à 14 arrêts ;
+ * 3. OSRM trace ensuite le trajet dans cet ordre, avec la distance et la durée.
+ */
 async function computeTrip(depot: Depot | null, stops: Order[]): Promise<Trip | null> {
   const located = stops.filter((o) => o.geo);
   const points = [...(depot ? [{ id: "depot", lat: depot.lat, lon: depot.lon }] : []), ...located.map((o) => ({ id: o.id, lat: o.geo!.lat, lon: o.geo!.lon }))];
   if (points.length < 2) return null;
-  const coords = points.map((p) => `${p.lon.toFixed(6)},${p.lat.toFixed(6)}`).join(";");
-  const options = depot ? "source=first&roundtrip=true" : "source=first&destination=last&roundtrip=false";
-  const response = await fetch(`https://router.project-osrm.org/trip/v1/driving/${coords}?${options}&overview=full&geometries=geojson`);
-  if (!response.ok) return null;
-  const data = await response.json();
-  const trip = data.trips?.[0];
-  if (!trip) return null;
-  const ranked = points
-    .map((p, i) => ({ id: p.id, rank: data.waypoints[i].waypoint_index as number }))
-    .filter((p) => p.id !== "depot")
-    .sort((a, b) => a.rank - b.rank);
+  const coords = (list: typeof points) => list.map((p) => `${p.lon.toFixed(6)},${p.lat.toFixed(6)}`).join(";");
+
+  const tableResponse = await fetch(`${OSRM}/table/v1/driving/${coords(points)}?annotations=duration`);
+  if (!tableResponse.ok) return null;
+  const durations: (number | null)[][] | undefined = (await tableResponse.json()).durations;
+  if (!durations) return null;
+  // Un trajet impossible (adresse isolée du réseau routier) est compté comme très long plutôt qu'ignoré.
+  const cost = durations.map((row) => row.map((v) => (v == null ? 1e7 : v)));
+
+  const solved = depot ? solveRoundTrip(cost) : solveOpenPath(cost);
+  const ordered = solved.order.map((i) => points[i]);
+  const path = depot ? [points[0], ...ordered, points[0]] : ordered;
+
+  const routeResponse = await fetch(`${OSRM}/route/v1/driving/${coords(path)}?overview=full&geometries=geojson`);
+  if (!routeResponse.ok) return null;
+  const route = (await routeResponse.json()).routes?.[0];
+  if (!route) return null;
   return {
-    order: ranked.map((p) => p.id),
-    line: (trip.geometry.coordinates as [number, number][]).map(([lon, lat]) => [lat, lon]),
-    distanceKm: trip.distance / 1000,
-    minutes: Math.round(trip.duration / 60),
+    order: ordered.map((p) => p.id),
+    line: (route.geometry.coordinates as [number, number][]).map(([lon, lat]) => [lat, lon]),
+    distanceKm: route.distance / 1000,
+    minutes: Math.round(route.duration / 60),
+    exact: solved.exact,
   };
 }
 
@@ -164,7 +181,7 @@ function Cashbox({ order }: { order: Order }) {
           </div>
         ) : (
           <button type="button" onClick={() => setAdding(true)} className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-slate-700 underline-offset-2 hover:underline">
-            <Plus size={15} /> Ajouter une prestation non facturée
+            <Plus size={15} /> Ajouter une prestation (s'ajoute au total)
           </button>
         )
       ) : null}
@@ -172,11 +189,19 @@ function Cashbox({ order }: { order: Order }) {
   );
 }
 
-function Stop({ order, index }: { order: Order; index: number }) {
+/**
+ * Lien Waze vers l'adresse d'une commande : ouvre l'application directement en guidage.
+ * Avec les coordonnées quand l'adresse est placée sur la carte, sinon avec l'adresse écrite.
+ */
+function wazeUrl(order: Order): string {
+  return order.geo ? `https://waze.com/ul?ll=${order.geo.lat}%2C${order.geo.lon}&navigate=yes` : `https://waze.com/ul?q=${encodeURIComponent(fullAddress(order))}&navigate=yes`;
+}
+
+function Stop({ order, index, next }: { order: Order; index: number; next: boolean }) {
   const { pending, run } = useAction();
   const done = order.status === "done";
   const address = fullAddress(order);
-  const destination = order.geo ? `${order.geo.lat},${order.geo.lon}` : encodeURIComponent(address);
+  const waze = wazeUrl(order);
   return (
     <Card className={`p-4 ${done ? "opacity-70" : ""}`}>
       <div className="flex items-start gap-3">
@@ -186,13 +211,28 @@ function Stop({ order, index }: { order: Order; index: number }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div className="truncate text-base font-semibold text-slate-900">{order.customer.name}</div>
-            <span className="shrink-0 rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-800">{DELIVERY_MODES[order.delivery.mode].short}</span>
+            <span className="flex shrink-0 flex-col items-end gap-1">
+              {next ? <span className="rounded-full bg-black px-2.5 py-1 text-xs font-semibold text-white">Prochain arrêt</span> : null}
+              <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-800">{DELIVERY_MODES[order.delivery.mode].short}</span>
+            </span>
           </div>
-          <div className="mt-0.5 flex items-start gap-1.5 text-sm text-slate-600">
-            <MapPin size={15} className="mt-0.5 shrink-0 text-slate-400" /> {address || "Adresse non renseignée"}
-          </div>
+          {address ? (
+            <a
+              href={waze}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`Ouvrir ${address} dans Waze`}
+              className="mt-1 flex items-start gap-1.5 rounded-lg text-sm font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 active:bg-slate-100"
+            >
+              <Navigation size={15} className="mt-0.5 shrink-0 text-sky-600" /> {address}
+            </a>
+          ) : (
+            <div className="mt-0.5 flex items-start gap-1.5 text-sm text-slate-600">
+              <MapPin size={15} className="mt-0.5 shrink-0 text-slate-400" /> Adresse non renseignée
+            </div>
+          )}
           <div className="tabular mt-0.5 text-xs text-slate-500">
-            {order.number} · {timeLabel(order)}
+            {order.number} · {timeLabel(order)} · {shopName(order.shop)}
           </div>
         </div>
       </div>
@@ -218,8 +258,8 @@ function Stop({ order, index }: { order: Order; index: number }) {
               <Phone size={16} /> Appeler
             </a>
           ) : null}
-          <a href={`https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&to=${destination}`} target="_blank" rel="noreferrer" className={`${buttonSecondary} justify-center`}>
-            <Navigation size={16} /> Itinéraire
+          <a href={waze} target="_blank" rel="noreferrer" aria-label={`Ouvrir l'itinéraire vers ${order.customer.name} dans Waze`} className={`${buttonSecondary} justify-center`}>
+            <Navigation size={16} /> Waze
           </a>
           <button
             type="button"
@@ -241,24 +281,107 @@ function Stop({ order, index }: { order: Order; index: number }) {
   );
 }
 
-export default function DriverBoard({ date, today, orders, depot }: { date: string; today: string; orders: Order[]; depot: Depot | null }) {
+/**
+ * Choix du point de départ de la tournée : le dépôt DECOSHOP (par défaut) ou une adresse saisie à la main.
+ * L'adresse manuelle ne vaut que pour cette tournée : le dépôt enregistré ne change pas.
+ */
+function StartPicker({ companyName, depotAddress, depotLocated, manual, onManual }: { companyName: string; depotAddress: string; depotLocated: boolean; manual: Depot | null; onManual: (start: Depot | null) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(manual?.address ?? "");
+  const [busy, setBusy] = useState(false);
+  const choice = "flex min-w-0 flex-1 items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm transition";
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    const result = await locateAddress(value);
+    setBusy(false);
+    if (!result.ok) return toast(result.error, "error");
+    onManual(result.data);
+    setEditing(false);
+  };
+  return (
+    <div className="mb-4">
+      <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-slate-500">Départ de la tournée</div>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <button type="button" aria-pressed={!manual} onClick={() => { if (manual) onManual(null); setEditing(false); }} className={`${choice} ${!manual ? "border-black bg-black text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"}`}>
+          <MapPin size={16} className="shrink-0" />
+          <span className="min-w-0">
+            <span className="block font-semibold">{companyName}</span>
+            <span className={`block truncate text-xs ${!manual ? "text-neutral-300" : "text-slate-500"}`}>
+              {depotAddress}
+              {depotLocated ? "" : " · recherche sur la carte…"}
+            </span>
+          </span>
+        </button>
+        <button type="button" aria-pressed={Boolean(manual)} onClick={() => setEditing(true)} className={`${choice} ${manual ? "border-black bg-black text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"}`}>
+          <Navigation size={16} className="shrink-0" />
+          <span className="min-w-0">
+            <span className="block font-semibold">Autre adresse</span>
+            <span className={`block truncate text-xs ${manual ? "text-neutral-300" : "text-slate-500"}`}>{manual ? manual.address : "Saisir un autre point de départ"}</span>
+          </span>
+        </button>
+      </div>
+      {editing ? (
+        <form onSubmit={submit} className="mt-2 flex flex-wrap items-end gap-2">
+          <label className="min-w-[240px] flex-1">
+            <span className="mb-1 block text-xs font-medium text-slate-700">Adresse de départ pour cette tournée</span>
+            <input className={inputClass} value={value} onChange={(e) => setValue(e.target.value)} placeholder="Numéro, rue, code postal, ville" autoFocus />
+          </label>
+          <button type="submit" disabled={busy || !value.trim()} className={`${buttonPrimary} h-[42px] md:h-[38px]`}>
+            {busy ? <Loader2 size={16} className="animate-spin" /> : <Route size={16} />} Calculer depuis cette adresse
+          </button>
+          <button type="button" onClick={() => setEditing(false)} className={`${buttonSecondary} h-[42px] md:h-[38px]`}>
+            Annuler
+          </button>
+        </form>
+      ) : null}
+    </div>
+  );
+}
+
+export default function DriverBoard({ date, today, orders, depot: storedDepot, depotAddress, companyName }: { date: string; today: string; orders: Order[]; depot: Depot | null; depotAddress: string; companyName: string }) {
+  // Tant que la nouvelle adresse de départ n'est pas placée sur la carte, on n'utilise pas l'ancienne.
+  const shop = storedDepot?.address === depotAddress ? storedDepot : null;
+  // Départ choisi à la main pour cette tournée (conservé tant que l'onglet reste ouvert).
+  const [manualStart, setManualStart] = useState<Depot | null>(null);
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("depart-tournee");
+      if (saved) setManualStart(JSON.parse(saved));
+    } catch {
+      // stockage indisponible : on reste sur le dépôt
+    }
+  }, []);
+  const chooseStart = (start: Depot | null) => {
+    setManualStart(start);
+    try {
+      if (start) sessionStorage.setItem("depart-tournee", JSON.stringify(start));
+      else sessionStorage.removeItem("depart-tournee");
+    } catch {
+      // sans importance
+    }
+    setAutoRun((n) => n + 1); // le changement de départ relance le calcul du trajet le plus rapide
+  };
+  const [autoRun, setAutoRun] = useState(0);
+  const depot = manualStart ?? shop;
   const router = useRouter();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [busy, setBusy] = useState(false);
 
   // Coordonnées manquantes : recherchées une fois à l'ouverture de la journée.
-  const missing = orders.some((o) => !o.geo && !o.geoFailed && fullAddress(o)) || !depot;
+  const depotLocated = shop !== null;
+  const missing = orders.some((o) => !o.geo && !o.geoFailed && fullAddress(o)) || !depotLocated;
   useEffect(() => {
-    if (!missing || orders.length === 0) return;
+    if (!missing) return;
     let cancelled = false;
     locateDeliveries(date).then(() => !cancelled && router.refresh());
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date]);
+  }, [date, depotAddress]);
 
-  useEffect(() => setTrip(null), [date]);
+  useEffect(() => setTrip(null), [date, depotAddress]);
 
   const sorted = useMemo(() => {
     if (trip) {
@@ -268,21 +391,24 @@ export default function DriverBoard({ date, today, orders, depot }: { date: stri
     return [...orders].sort((a, b) => sortKey(a).localeCompare(sortKey(b)) || a.customer.postalCode.localeCompare(b.customer.postalCode));
   }, [orders, trip]);
 
+  const nextStop = sorted.find((o) => o.status === "active") ?? null;
+
   const points: MapPoint[] = useMemo(
     () => [
-      ...(depot ? [{ lat: depot.lat, lon: depot.lon, label: "D", title: "Dépôt", depot: true }] : []),
+      ...(depot ? [{ lat: depot.lat, lon: depot.lon, label: "D", title: manualStart ? `Départ : ${depot.address}` : `Départ : ${companyName}`, depot: true }] : []),
       ...sorted.flatMap((o, i) => (o.geo ? [{ lat: o.geo.lat, lon: o.geo.lon, label: String(i + 1), title: `${i + 1}. ${o.customer.name}`, done: o.status === "done" }] : [])),
     ],
     [sorted, depot],
   );
 
   const optimize = async () => {
+    if (!depot) return void toast("Le point de départ n'est pas encore placé sur la carte. Réessayez dans un instant.", "info");
     setBusy(true);
     try {
       const result = await computeTrip(depot, orders.filter((o) => o.status === "active"));
       if (result) {
         setTrip(result);
-        toast("Tournée optimisée");
+        toast(`${result.exact ? "Trajet le plus rapide" : "Tournée optimisée"} depuis ${manualStart ? manualStart.address : companyName}`);
       } else {
         toast("Il faut au moins deux points localisés pour tracer un itinéraire.", "info");
       }
@@ -292,6 +418,12 @@ export default function DriverBoard({ date, today, orders, depot }: { date: stri
       setBusy(false);
     }
   };
+
+  // Départ changé : on recalcule tout de suite depuis le nouveau point.
+  useEffect(() => {
+    if (autoRun > 0) void optimize();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRun]);
 
   // Caisse de la tournée : ce qu'il reste à encaisser, et ce que le livreur a reçu ce jour-là.
   const cash = useMemo(() => {
@@ -338,6 +470,31 @@ export default function DriverBoard({ date, today, orders, depot }: { date: stri
         </button>
       </div>
 
+      <StartPicker companyName={companyName} depotAddress={depotAddress} depotLocated={depotLocated} manual={manualStart} onManual={chooseStart} />
+
+      {nextStop ? (
+        <a
+          href={wazeUrl(nextStop)}
+          target="_blank"
+          rel="noreferrer"
+          className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl bg-black px-4 py-4 text-white shadow-sm transition active:scale-[0.99] md:px-5"
+        >
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-white text-black">
+            <Navigation size={22} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs font-medium uppercase tracking-wide text-neutral-400">
+              Prochain arrêt · {sorted.findIndex((o) => o.id === nextStop.id) + 1} sur {sorted.length} · {timeLabel(nextStop)}
+            </span>
+            <span className="block truncate text-lg font-semibold leading-tight">{nextStop.customer.name}</span>
+            <span className="block text-sm leading-snug text-neutral-300">{fullAddress(nextStop) || "Adresse non renseignée"}</span>
+          </span>
+          <span className="w-full rounded-lg bg-white px-3 py-2.5 text-center text-sm font-semibold text-black sm:w-auto">Ouvrir Waze</span>
+        </a>
+      ) : orders.length > 0 ? (
+        <p className="mb-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">Toutes les livraisons du jour sont faites.</p>
+      ) : null}
+
       {orders.length > 0 ? (
         <Card className="tabular mb-4 grid grid-cols-3 divide-x divide-slate-100 text-center">
           <div className="px-2 py-3">
@@ -366,7 +523,7 @@ export default function DriverBoard({ date, today, orders, depot }: { date: stri
           </Card>
           <div className="flex flex-col gap-3 md:order-1">
             {sorted.map((order, index) => (
-              <Stop key={order.id} order={order} index={index} />
+              <Stop key={order.id} order={order} index={index} next={order.id === nextStop?.id} />
             ))}
           </div>
         </div>

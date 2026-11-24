@@ -1,12 +1,13 @@
 "use client";
 
-import { AlertTriangle, BellRing, CalendarDays, Check, ChevronLeft, ChevronRight, GripVertical, Phone, X } from "lucide-react";
+import { AlertTriangle, BellRing, CalendarDays, Check, ChevronLeft, ChevronRight, GripVertical, Mail, Phone, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { scheduleOrder, setReminded } from "@/app/commandes/actions";
-import { DELIVERY_MODES, addDays, dayLabel, fullAddress, hourLabel, isPickup, isStockComplete, sortKey, timeLabel } from "@/lib/orders/logic";
+import { DELIVERY_MODES, addDays, dayLabel, fullAddress, hourLabel, isPickup, isStockComplete, shopName, sortKey, timeLabel } from "@/lib/orders/logic";
 import type { Order } from "@/lib/orders/types";
 import { Card, CardHeader, buttonPrimary, buttonSecondary } from "../ui";
+import { useSendEmail } from "./EmailPanel";
 import { ScheduleControl, useAction } from "./OrderActions";
 import { PreparedBadge, StockBadge, inputClass } from "./bits";
 
@@ -62,6 +63,7 @@ function OrderRow({ order, children }: { order: Order; children?: React.ReactNod
             {order.number} · {DELIVERY_MODES[order.delivery.mode].short}
             {order.scheduledDate ? ` · ${timeLabel(order)}` : ""}
             {!isPickup(order) && order.customer.city ? ` · ${order.customer.city}` : ""}
+            {` · magasin ${shopName(order.shop)}`}
           </div>
         </Link>
         <div className="flex shrink-0 flex-wrap justify-end gap-1">
@@ -76,6 +78,7 @@ function OrderRow({ order, children }: { order: Order; children?: React.ReactNod
 
 function ReminderRow({ order }: { order: Order }) {
   const { pending, run } = useAction();
+  const mail = useSendEmail();
   return (
     <OrderRow order={order}>
       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -86,6 +89,11 @@ function ReminderRow({ order }: { order: Order }) {
         ) : (
           <span className="text-xs text-slate-400">Pas de téléphone</span>
         )}
+        {order.customer.email ? (
+          <button type="button" disabled={mail.pending} onClick={() => mail.send(order, "rappel")} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+            <Mail size={13} /> Rappel par e-mail
+          </button>
+        ) : null}
         <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700">
           <input type="checkbox" className="h-4 w-4 accent-black" checked={order.reminded} disabled={pending} onChange={(e) => run(() => setReminded(order.id, e.target.checked), e.target.checked ? "Client prévenu" : undefined)} />
           Client prévenu

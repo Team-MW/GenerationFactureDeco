@@ -12,7 +12,7 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
     <>
       <PageHeader
         title="Factures"
-        subtitle="Générées automatiquement à partir des fichiers importés · PDF enregistrés dans le dossier factures/"
+        subtitle="Générées automatiquement à partir des fichiers importés"
       />
       <InvoiceTable invoices={invoices} initialMonth={mois ?? ""} defaultDesignation={(await getSettings()).designation} />
     </>

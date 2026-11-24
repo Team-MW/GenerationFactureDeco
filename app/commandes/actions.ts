@@ -7,7 +7,10 @@ import { DELIVERY_MODES, PAYMENT_METHODS, cleanTime, fullAddress, hourLabel, isP
 import { UserError, clean, euros, id, insertOrder, isDate, frDate, log, makeArticle, now, parsePrice, round2 } from "@/lib/orders/build";
 import { StoreError, currentScope, loadDb, mutate } from "@/lib/orders/store";
 import type { Article, Db, Order, OrderInput, PaymentMethod, Result, Slot } from "@/lib/orders/types";
-import { getSettings } from "@/lib/settings";
+import { DEFAULT_SETTINGS, getSettings } from "@/lib/settings";
+import { MAIL_CONFIGURED, MailError, isEmail, sendMail } from "@/lib/mail";
+import { EMAIL_KINDS, buildEmail, isEmailKind, type EmailKind } from "@/lib/orders/emails";
+import { renderDeliveryNote } from "@/lib/orders/pdf";
 import { ACCESS_COOKIE, accessPassword, accessToken } from "@/lib/access";
 
 
@@ -23,7 +26,7 @@ async function run<T>(work: () => Promise<T>): Promise<Result<T>> {
     revalidatePath("/", "layout");
     return { ok: true, data };
   } catch (error) {
-    if (error instanceof UserError || error instanceof StoreError) return { ok: false, error: error.message };
+    if (error instanceof UserError || error instanceof StoreError || error instanceof MailError) return { ok: false, error: error.message };
     console.error("[commandes]", error);
     return { ok: false, error: "Une erreur est survenue. Réessayez." };
   }
@@ -133,8 +136,67 @@ export async function createOrder(input: OrderInput) {
       return insertOrder(db, input, scope === "test" ? "TEST" : "BL").id;
     });
     await locate(orderId);
+    // Bon de commande par e-mail dès la création, si demandé. Un échec d'envoi ne bloque jamais la commande.
+    if (input.sendEmail && scope === "real" && MAIL_CONFIGURED) {
+      try {
+        await deliverEmail(orderId, "bon");
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "erreur inconnue";
+        await mutate((db) => log(findOrder(db, orderId), `E-mail du bon de commande non envoyé : ${reason}`)).catch(() => undefined);
+      }
+    }
     return orderId;
   });
+}
+
+/* ───────────────────────── E-mails au client ───────────────────────── */
+
+/** Envoie réellement un message et le consigne sur la commande. */
+async function deliverEmail(orderId: string, kind: EmailKind) {
+  const order = findOrder(await loadDb(), orderId);
+  if (order.status === "cancelled") throw new UserError("Cette commande est annulée : aucun e-mail n'est envoyé.");
+  const to = order.customer.email.trim();
+  if (!to) throw new UserError("Cette commande n'a pas d'adresse e-mail client.");
+  if (!isEmail(to)) throw new UserError("L'adresse e-mail du client est invalide.");
+  if ((kind === "programmation" || kind === "rappel") && !order.scheduledDate) throw new UserError("Programmez d'abord la date avant d'envoyer ce message.");
+  const settings = await getSettings();
+  const mail = buildEmail(kind, order, settings);
+  const attachments = kind === "bon" ? [{ filename: `Bon de commande ${order.number}.pdf`, content: await renderDeliveryNote(order, settings), contentType: "application/pdf" }] : undefined;
+  await sendMail({ to, ...mail, attachments });
+  await mutate((db) => {
+    const target = findOrder(db, orderId);
+    target.emails.push({ at: now(), kind, to });
+    if (kind === "rappel") target.reminded = true;
+    log(target, `E-mail envoyé à ${to} : ${EMAIL_KINDS[kind].label.toLowerCase()}`);
+  });
+}
+
+/** Envoi d'un message au client depuis la fiche commande ou l'espace livraison. */
+export async function sendOrderEmail(orderId: string, kind: string) {
+  return run(async () => {
+    if (!isEmailKind(kind)) throw new UserError("Message inconnu.");
+    if ((await currentScope()) === "test") {
+      // En mode test, rien ne part : on montre seulement ce qui se passerait.
+      await mutate((db) => log(findOrder(db, orderId), `E-mail simulé (mode test) : ${EMAIL_KINDS[kind].label.toLowerCase()}`));
+      return { simulated: true };
+    }
+    await deliverEmail(orderId, kind);
+    return { simulated: false };
+  });
+}
+
+/** Ajoute ou corrige l'adresse e-mail du client d'une commande. */
+export async function setCustomerEmail(orderId: string, email: string) {
+  return run(() =>
+    mutate((db) => {
+      const order = findOrder(db, orderId);
+      const value = clean(email, 120);
+      if (value && !isEmail(value)) throw new UserError("Adresse e-mail invalide.");
+      order.customer.email = value;
+      log(order, value ? `Adresse e-mail du client : ${value}` : "Adresse e-mail du client retirée");
+      return undefined;
+    }),
+  );
 }
 
 export async function scheduleOrder(orderId: string, date: string | null, slot: Slot, time = "") {
@@ -321,12 +383,23 @@ export async function cancelOrder(orderId: string) {
   );
 }
 
+/** Place une adresse saisie à la main sur la carte, sans rien enregistrer (départ ponctuel d'une tournée). */
+export async function locateAddress(address: string) {
+  return run(async () => {
+    const value = clean(address, 200);
+    if (value.length < 8) throw new UserError("Saisissez une adresse complète (numéro, rue, code postal, ville).");
+    const geo = await geocode(value);
+    if (!geo) throw new UserError("Adresse introuvable sur la carte. Vérifiez le numéro, la rue et la ville.");
+    return { address: value, ...geo };
+  });
+}
+
 /** Recherche les coordonnées des livraisons d'une journée et du dépôt (pour la carte du livreur). */
 export async function locateDeliveries(date: string) {
   return run(async () => {
     const db = await loadDb();
     const settings = await getSettings();
-    const depotAddress = [settings.address, settings.postalCode, settings.city].filter(Boolean).join(", ");
+    const depotAddress = settings.depotAddress.trim() || DEFAULT_SETTINGS.depotAddress;
     if (depotAddress && db.depot?.address !== depotAddress) {
       const geo = await geocode(depotAddress);
       if (geo) await mutate((fresh) => void (fresh.depot = { address: depotAddress, ...geo }));

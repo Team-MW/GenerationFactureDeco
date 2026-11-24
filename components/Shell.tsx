@@ -1,28 +1,20 @@
 "use client";
 
-import { ArrowLeft, CheckCircle2, FileText, Info, LayoutDashboard, Settings, UploadCloud, XCircle } from "lucide-react";
+import { ArrowLeft, FileText, FlaskConical, LayoutDashboard, Settings, UploadCloud } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { toast, uploadFiles, type ToastKind } from "@/lib/client";
+import { toast, uploadFiles } from "@/lib/client";
 
 const NAV = [
   { href: "/lenbox", label: "Tableau de bord", short: "Accueil", icon: LayoutDashboard },
   { href: "/lenbox/factures", label: "Factures", short: "Factures", icon: FileText },
   { href: "/lenbox/import", label: "Import des fichiers", short: "Import", icon: UploadCloud },
-  { href: "/lenbox/parametres", label: "Paramètres", short: "Réglages", icon: Settings },
+  { href: "/parametres", label: "Paramètres", short: "Réglages", icon: Settings },
 ];
 
-interface ToastItem {
-  id: number;
-  message: string;
-  kind: ToastKind;
-}
 
-const TOAST_ICONS = { success: CheckCircle2, error: XCircle, info: Info };
-const TOAST_COLORS = { success: "text-emerald-400", error: "text-rose-400", info: "text-sky-400" };
-
-export default function Shell({ companyName, children }: { companyName: string; children: ReactNode }) {
+export default function Shell({ companyName, testMode = false, children }: { companyName: string; testMode?: boolean; children: ReactNode }) {
   const pathname = usePathname();
   // Le centre est la seule zone qui défile : on la remet en haut à chaque changement de page.
   const scroller = useRef<HTMLDivElement>(null);
@@ -30,23 +22,10 @@ export default function Shell({ companyName, children }: { companyName: string; 
     scroller.current?.scrollTo({ top: 0 });
   }, [pathname]);
   const router = useRouter();
-  const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   const version = useRef<string | null>(null);
 
-  // Notifications
-  useEffect(() => {
-    let nextId = 1;
-    const onToast = (event: Event) => {
-      const { message, kind } = (event as CustomEvent<{ message: string; kind: ToastKind }>).detail;
-      const id = nextId++;
-      setToasts((list) => [...list, { id, message, kind }]);
-      setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), 5000);
-    };
-    window.addEventListener("app-toast", onToast);
-    return () => window.removeEventListener("app-toast", onToast);
-  }, []);
 
   // Détection des fichiers déposés directement dans le dossier data/
   useEffect(() => {
@@ -173,6 +152,14 @@ export default function Shell({ companyName, children }: { companyName: string; 
             </div>
           </div>
         </header>
+        {testMode ? (
+          <div className="flex items-start gap-2 border-b border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 sm:px-8">
+            <FlaskConical size={16} className="mt-0.5 shrink-0 text-amber-600" />
+            <span>
+              Le mode test ne concerne que les commandes. <strong className="font-semibold text-slate-900">Les factures Lenbox affichées ici sont vos vraies données</strong> : un import ou un retrait de fichier est bien réel.
+            </span>
+          </div>
+        ) : null}
         <main className="mx-auto max-w-[1280px] px-4 pb-28 pt-5 sm:px-8 md:py-8">{children}</main>
       </div>
 
@@ -210,17 +197,6 @@ export default function Shell({ companyName, children }: { companyName: string; 
         </div>
       ) : null}
 
-      <div className="fixed bottom-24 right-4 z-50 flex w-[340px] max-w-[calc(100vw-32px)] flex-col gap-2 md:bottom-5 md:right-5" aria-live="polite">
-        {toasts.map((t) => {
-          const Icon = TOAST_ICONS[t.kind];
-          return (
-            <div key={t.id} className="toast-in flex items-start gap-3 rounded-xl bg-black px-4 py-3 text-sm text-white shadow-lg">
-              <Icon size={18} className={`mt-0.5 shrink-0 ${TOAST_COLORS[t.kind]}`} />
-              <span>{t.message}</span>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }

@@ -17,7 +17,7 @@ create table if not exists public.deco_articles (
   created_at  timestamptz    not null default now()
 );
 
--- Commandes / bons de livraison.
+-- Commandes / bons de commande.
 create table if not exists public.deco_orders (
   id              text primary key,
   number          text        not null unique,              -- ex. BL-2026-0001
@@ -37,7 +37,8 @@ create table if not exists public.deco_orders (
   history         jsonb       not null default '[]'::jsonb   -- [ { at, text } ]
 );
 
--- Champs ajoutés après la première version : { shop, observations, paid }.
+-- Champs ajoutés après la première version :
+-- { shop, observations, paid, time, payments, extras, emails, geoFailed }.
 alter table public.deco_orders add column if not exists extra jsonb not null default '{}'::jsonb;
 
 create index if not exists deco_orders_scheduled_date_idx on public.deco_orders (scheduled_date);
@@ -57,6 +58,7 @@ insert into public.deco_gestion_meta (id) values (true) on conflict (id) do noth
 -- ───────────────────────── Paramètres de l'application ─────────────────────────
 -- Clé « settings » : informations de la société et réglages des factures.
 -- Clé « logo »     : image du logo ({ format, data en base64 }).
+-- Clé « gestion_test » : jeu de commandes fictives du mode test ({ version, db }).
 create table if not exists public.deco_settings (
   key         text primary key,
   value       jsonb       not null,

@@ -19,3 +19,11 @@ Exemple bon de commande.pdf
 
 # Captures de la simulation (clients fictifs)
 Simulation/
+
+# Données de test locales
+data/gestion-test.json
+data/gestion-test.json.tmp
+# Factures PDF générées en local et état de l'import : recréés automatiquement, contiennent des noms de clients
+factures/
+data/lenbox.json
+.DS_Store

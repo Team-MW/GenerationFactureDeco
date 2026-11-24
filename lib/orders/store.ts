@@ -47,7 +47,7 @@ interface OrderRow {
   geo: Order["geo"];
   history: Order["history"];
   /** Champs ajoutés après coup, regroupés pour éviter une migration à chaque évolution. */
-  extra: { shop?: ShopId; observations?: string; paid?: number; time?: string; payments?: Payment[]; extras?: Extra[]; geoFailed?: boolean } | null;
+  extra: { shop?: ShopId; observations?: string; paid?: number; time?: string; payments?: Payment[]; extras?: Extra[]; geoFailed?: boolean; emails?: Order["emails"] } | null;
 }
 
 const articleFromRow = (r: ArticleRow): Article => ({
@@ -99,6 +99,7 @@ const orderFromRow = (r: OrderRow): Order => withPayments({
   doneAt: r.done_at,
   geo: r.geo,
   geoFailed: r.extra?.geoFailed ?? false,
+  emails: r.extra?.emails ?? [],
   history: r.history ?? [],
 });
 
@@ -119,7 +120,7 @@ const orderToRow = (o: Order): OrderRow => ({
   done_at: o.doneAt,
   geo: o.geo,
   history: o.history,
-  extra: { shop: o.shop, observations: o.observations, paid: o.paid, time: o.time, payments: o.payments, extras: o.extras, geoFailed: o.geoFailed ?? false },
+  extra: { shop: o.shop, observations: o.observations, paid: o.paid, time: o.time, payments: o.payments, extras: o.extras, geoFailed: o.geoFailed ?? false, emails: o.emails },
 });
 
 async function loadRemote(): Promise<{ db: Db; version: number }> {
@@ -189,6 +190,7 @@ function loadFile(): Db {
       order.time ??= "";
       order.payments ??= [];
       order.extras ??= [];
+      order.emails ??= [];
       withPayments(order);
       order.customer.email ??= "";
     }
@@ -271,7 +273,10 @@ async function writeTest(next: TestState, expectedVersion: number | null): Promi
 /** Charge le jeu de test ; le crée avec la simulation s'il n'existe pas encore. */
 async function loadTest(): Promise<TestState> {
   const existing = await readTest();
-  if (existing?.db) return existing;
+  if (existing?.db) {
+    for (const order of existing.db.orders) order.emails ??= [];
+    return existing;
+  }
   const fresh: TestState = { version: 1, db: demoDb() };
   await writeTest(fresh, null);
   return fresh;

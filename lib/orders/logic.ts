@@ -1,6 +1,12 @@
 import type { DeliveryMode, Discount, Order, PaymentMethod, ShopId, Slot } from "./types";
 
-export const PAYMENT_METHODS: Record<Exclude<PaymentMethod, "">, string> = { especes: "Espèces", carte: "Carte bancaire", cheque: "Chèque", virement: "Virement" };
+export const PAYMENT_METHODS: Record<Exclude<PaymentMethod, "">, string> = { especes: "Espèces", carte: "Carte bancaire", virement: "Virement" };
+
+/** « espèces, carte bancaire ou virement » : la liste écrite en toutes lettres. */
+export const PAYMENT_SENTENCE = Object.values(PAYMENT_METHODS)
+  .map((label) => label.toLowerCase())
+  .join(", ")
+  .replace(/, ([^,]*)$/, " ou $1");
 
 /** Magasins, tels qu'ils figurent sur le bon de commande. */
 export const SHOPS: Record<ShopId, { label: string; address: string }> = {
@@ -66,6 +72,12 @@ export function orderTotals(order: Pick<Order, "lines" | "discount" | "delivery"
   const extras = round2((order.extras ?? []).reduce((t, e) => t + e.amount, 0));
   const total = round2(subtotal - discount + delivery + extras);
   return { subtotal, discount, delivery, extras, total, vat: round2(total - total / 1.2) };
+}
+
+/** « Toulouse », « Paris » : nom court du magasin qui a pris la commande. */
+export function shopName(shop: ShopId): string {
+  const city = SHOPS[shop].label.replace(/^\S+\s+/, "");
+  return city.charAt(0) + city.slice(1).toLowerCase();
 }
 
 /** Montant réglé et reste à payer. */

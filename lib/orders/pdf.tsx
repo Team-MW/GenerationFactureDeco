@@ -170,7 +170,7 @@ function OrderDocument({ order, settings }: { order: Order; settings: Settings }
               <Text style={s.cQty}> </Text>
               <View style={s.cDesc}>
                 <Text style={s.bold}>
-                  Remise{order.discount.type === "percent" ? ` ${String(order.discount.value).replace(".", ",")} %` : ""}
+                  Réduction{order.discount.type === "percent" ? ` ${String(order.discount.value).replace(".", ",")} %` : ""}
                 </Text>
               </View>
               <Text style={s.cUnit}> </Text>
@@ -182,13 +182,13 @@ function OrderDocument({ order, settings }: { order: Order; settings: Settings }
             <Text style={[s.cQty, s.bold]}>1</Text>
             <View style={s.cDesc}>
               <Text style={s.bold}>{mode.label}</Text>
-              {order.delivery.offered ? <Text style={[s.sub, s.bold]}>Offert</Text> : null}
+              {order.delivery.offered ? <Text style={[s.sub, s.bold]}>Offerte</Text> : null}
               {!order.delivery.offered && order.delivery.adjustment > 0 ? <Text style={s.sub}>Dont supplément distance {money(order.delivery.adjustment)}</Text> : null}
               {!order.delivery.offered && order.delivery.adjustment < 0 ? <Text style={s.sub}>Dont remise {money(-order.delivery.adjustment)}</Text> : null}
               {order.customer.notes ? <Text style={s.sub}>{order.customer.notes}</Text> : null}
             </View>
-            <Text style={s.cUnit}>{pickup ? " " : order.delivery.offered ? "Offert" : money(totals.delivery)}</Text>
-            <Text style={[s.cTotal, s.bold]}>{pickup ? " " : order.delivery.offered ? "Offert" : money(totals.delivery)}</Text>
+            <Text style={s.cUnit}>{pickup ? " " : order.delivery.offered ? "Offerte" : money(totals.delivery)}</Text>
+            <Text style={[s.cTotal, s.bold]}>{pickup ? " " : order.delivery.offered ? "Offerte" : money(totals.delivery)}</Text>
           </View>
 
           {order.extras.map((extra) => (

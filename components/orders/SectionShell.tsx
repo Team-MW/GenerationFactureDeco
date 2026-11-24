@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Info,
   PackageCheck,
+  Settings,
   Plus,
   Truck,
   XCircle,
@@ -27,6 +28,7 @@ const ICONS: Record<string, LucideIcon> = {
   warehouse: PackageCheck,
   truck: Truck,
   chart: BarChart3,
+  settings: Settings,
 };
 
 export interface NavItem {
@@ -167,7 +169,6 @@ export default function SectionShell({
         </nav>
       ) : null}
 
-      <Toaster />
     </div>
   );
 }

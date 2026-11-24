@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import NavProgress from "@/components/NavProgress";
+import { Toaster } from "@/components/orders/SectionShell";
 import { TestBanner } from "@/components/TestMode";
 import { currentScope } from "@/lib/orders/store";
 import "./globals.css";
@@ -28,6 +29,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="flex h-dvh flex-col overflow-hidden font-sans">
         <NavProgress />
         <ConfirmDialog />
+        <Toaster />
         {(await currentScope()) === "test" ? <TestBanner /> : null}
         <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
       </body>

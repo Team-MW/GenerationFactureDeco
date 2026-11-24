@@ -1,12 +1,14 @@
 import { ArrowLeft, Check, Download, Hourglass, MapPin, Phone } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import OrderActions, { PaymentControl } from "@/components/orders/OrderActions";
+import EmailPanel from "@/components/orders/EmailPanel";
+import OrderActions, { PaymentControl, RemoveExtraButton } from "@/components/orders/OrderActions";
 import { PreparedBadge, StageBadge, StockBadge, Warning } from "@/components/orders/bits";
 import { Card, CardHeader, buttonSecondary } from "@/components/ui";
 import { dateFr, eur } from "@/lib/format";
 import { DELIVERY_MODES, PAYMENT_METHODS, SHOPS, timeLabel, fullAddress, isPickup, isStockComplete, orderTotals } from "@/lib/orders/logic";
-import { loadDb, loadDbFresh } from "@/lib/orders/store";
+import { MAIL_CONFIGURED } from "@/lib/mail";
+import { currentScope, loadDb, loadDbFresh } from "@/lib/orders/store";
 
 export const dynamic = "force-dynamic";
 
@@ -106,6 +108,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                     <div className="truncate text-sm font-medium text-slate-900">{extra.label}</div>
                     <div className="tabular text-xs text-slate-500">Prestation ajoutée le {when(extra.at)}</div>
                   </div>
+                  {order.status === "active" ? <RemoveExtraButton orderId={order.id} extraId={extra.id} label={extra.label} /> : null}
                   <div className="tabular w-24 shrink-0 text-right text-sm font-semibold text-slate-900">{eur(extra.amount)}</div>
                 </li>
               ))}
@@ -139,7 +142,11 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           </Card>
 
           <Card className="overflow-hidden">
-            <CardHeader title="Bon de commande" hint="Généré automatiquement · recto commande, verso conditions générales" />
+            <CardHeader title="Bon de commande" hint="Généré automatiquement · recto commande, verso conditions générales">
+              <a href={`/api/commandes/${order.id}/bl`} target="_blank" rel="noreferrer" className="shrink-0 text-sm font-medium text-slate-900 underline underline-offset-4">
+                Ouvrir en grand
+              </a>
+            </CardHeader>
             <iframe src={`/api/commandes/${order.id}/bl#view=FitH&toolbar=1`} title={`Bon de commande ${order.number}`} className="mt-3 h-[640px] w-full border-t border-slate-100 bg-slate-100" />
           </Card>
         </div>
@@ -174,6 +181,11 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                 </>
               ) : null}
             </dl>
+          </Card>
+
+          <Card className="p-4 md:p-5">
+            <h2 className="mb-3 text-sm font-semibold text-slate-900">E-mails au client</h2>
+            <EmailPanel key={order.customer.email} order={order} configured={MAIL_CONFIGURED} testMode={(await currentScope()) === "test"} />
           </Card>
 
           <Card className="p-4 md:p-5">

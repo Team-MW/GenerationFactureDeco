@@ -1,7 +1,8 @@
 -- ============================================================================
 -- 02 · FONCTIONS
 -- À exécuter après 01_tables.sql. Peut être relancé sans risque.
--- L'application n'utilise que ces deux fonctions pour lire et écrire.
+-- L'application lit et écrit par ces fonctions (commandes : gestion_* ; Lenbox : lenbox_*),
+-- et directement dans la table deco_settings pour les paramètres.
 -- ============================================================================
 
 -- Lecture : renvoie tout l'état (articles, commandes, compteurs, dépôt, version).

@@ -7,7 +7,7 @@ import type { Db, OrderInput } from "./types";
  * au jour où on les charge. Clients, adresses et montants sont inventés.
  */
 export function demoDb(): Db {
-  const db: Db = { articles: [], orders: [], counters: {}, depot: { address: "Dépôt DECOSHOP", lat: 43.5728944, lon: 1.4088205 } };
+  const db: Db = { articles: [], orders: [], counters: {}, depot: null };
   const today = parisToday();
   const customer = (name: string, phone: string, address = "", postalCode = "", city = "", notes = "") => ({ name, phone, email: "", address, postalCode, city, notes });
   const base = { shop: "toulouse" as const, observations: "", paid: 0, discount: { type: "percent" as const, value: 0 }, scheduledDate: null, slot: "" as const };

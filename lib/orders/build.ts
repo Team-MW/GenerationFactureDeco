@@ -122,6 +122,7 @@ export function insertOrder(db: Db, input: OrderInput, prefix: string): Order {
     status: "active",
     doneAt: null,
     geo: null,
+    emails: [],
     history: [],
   };
   const { total } = orderTotals(order);

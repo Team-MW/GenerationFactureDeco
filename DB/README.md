@@ -12,7 +12,7 @@ Ou, fichier par fichier, dans cet ordre :
 
 | Ordre | Fichier | Rôle |
 |---|---|---|
-| 1 | `01_tables.sql` | Crée les tables : commandes (`deco_articles`, `deco_orders`), Lenbox (`deco_lenbox_files`, `deco_lenbox_transactions`), paramètres (`deco_settings`). Toutes préfixées `deco_` pour ne toucher à aucune autre table du projet |
+| 1 | `01_tables.sql` | Crée les tables : commandes (`deco_articles`, `deco_orders`, `deco_gestion_meta`), Lenbox (`deco_lenbox_files`, `deco_lenbox_transactions`, `deco_lenbox_meta`), paramètres et jeu de test (`deco_settings`). Toutes préfixées `deco_` pour ne toucher à aucune autre table du projet |
 | 2 | `02_fonctions.sql` | Crée les fonctions utilisées par l'application pour lire et écrire |
 | 3 | `03_securite.sql` | Verrouille l'accès : seule la clé secrète du serveur peut lire et écrire |
 
@@ -27,7 +27,7 @@ Dans Supabase : **Project Settings → API Keys**. Deux valeurs sont nécessaire
 
 | Variable | Valeur |
 |---|---|
-| `SUPABASE_URL` | `https://wfflkibfvcwzltwuteiy.supabase.co` |
+| `SUPABASE_URL` | l'adresse du projet, `https://VOTRE-PROJET.supabase.co` |
 | `SUPABASE_SECRET_KEY` | la clé **secrète** (`sb_secret_…`), à ne jamais partager ni publier |
 
 - **En local** : dans le fichier `.env.local` à la racine du projet.
@@ -36,7 +36,12 @@ Dans Supabase : **Project Settings → API Keys**. Deux valeurs sont nécessaire
 La clé publique (`sb_publishable_…`) n'est pas utilisée : avec elle, n'importe qui pourrait
 lire les données clients. Le fichier `03_securite.sql` lui interdit tout accès.
 
+## Autres fichiers
+
+- `04_requetes_utiles.sql` : requêtes de consultation, à lancer à la demande.
+- `05_nettoyage_premiere_version.sql` : facultatif, supprime les trois tables sans préfixe créées par la toute première installation (seulement si elles sont vides). À ne lancer que dans un projet dédié à cette application.
+
 ## Faire évoluer la base
 
-Pour toute modification future, ajoutez un nouveau fichier numéroté (`05_…sql`, `06_…sql`)
-plutôt que de modifier les anciens : le dossier garde ainsi l'historique de la base.
+Pour toute modification future, ajoutez un nouveau fichier numéroté (`06_…sql`, `07_…sql`) plutôt que de modifier les anciens,
+puis régénérez `00_installation_complete.sql` : le dossier garde ainsi l'historique de la base.

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, type ReactNode } from "react";
 import { toast } from "@/lib/client";
 import type { Settings } from "@/lib/types";
+import { confirmDialog } from "./ConfirmDialog";
 import { Card, CardHeader, buttonPrimary, buttonSecondary } from "./ui";
 
 const inputClass =
@@ -32,7 +33,7 @@ function Toggle({ checked, onChange, label, hint }: { checked: boolean; onChange
   );
 }
 
-export default function SettingsForm({ initial, hasLogo, sampleId }: { initial: Settings; hasLogo: boolean; sampleId: string | null }) {
+export default function SettingsForm({ initial, hasLogo, sampleId, localDisk = true }: { initial: Settings; hasLogo: boolean; sampleId: string | null; localDisk?: boolean }) {
   const router = useRouter();
   const [values, setValues] = useState(initial);
   const [saving, setSaving] = useState(false);
@@ -85,6 +86,7 @@ export default function SettingsForm({ initial, hasLogo, sampleId }: { initial: 
   };
 
   const deleteLogo = async () => {
+    if (!(await confirmDialog({ title: "Supprimer le logo ?", message: "Il disparaîtra des factures. Vous pourrez en remettre un à tout moment.", confirmLabel: "Supprimer", tone: "danger" }))) return;
     const response = await fetch("/api/parametres/logo", { method: "DELETE" });
     if (!response.ok) {
       toast((await response.json()).error ?? "Suppression impossible", "error");
@@ -98,7 +100,7 @@ export default function SettingsForm({ initial, hasLogo, sampleId }: { initial: 
     <form onSubmit={save} className="grid grid-cols-1 gap-4 xl:grid-cols-3">
       <div className="flex flex-col gap-4 xl:col-span-2">
         <Card>
-          <CardHeader title="Votre société" hint="Ces informations figurent sur chaque facture" />
+          <CardHeader title="Votre société" hint="Figurent sur les factures, les bons de commande et les e-mails" />
           <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-6 md:p-5">
             <Field label="Raison sociale" className="sm:col-span-4">
               <input {...text("companyName")} required />
@@ -143,7 +145,16 @@ export default function SettingsForm({ initial, hasLogo, sampleId }: { initial: 
         </Card>
 
         <Card>
-          <CardHeader title="Contenu des factures" hint="Libellé de la prestation, TVA et mentions" />
+          <CardHeader title="Livraisons" hint="Point de départ et de retour des tournées du livreur" />
+          <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-6 md:p-5">
+            <Field label="Adresse de départ des livraisons (dépôt)" className="sm:col-span-6" hint="L'adresse doit exister : elle est placée sur la carte à l'enregistrement">
+              <input {...text("depotAddress", "60 Rue Jacques Babinet, 31100 Toulouse")} />
+            </Field>
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="Factures Lenbox" hint="Libellé de la prestation, TVA et mentions" />
           <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-6 md:p-5">
             <Field label="Désignation" className="sm:col-span-4" hint="Intitulé de la ligne facturée">
               <input {...text("designation")} />
@@ -168,7 +179,7 @@ export default function SettingsForm({ initial, hasLogo, sampleId }: { initial: 
             <Field label="Mode de paiement" className="sm:col-span-2">
               <input {...text("paymentMethod")} />
             </Field>
-            <Field label="Couleur des factures" className="sm:col-span-2">
+            <Field label="Couleur des documents" className="sm:col-span-2">
               <div className="flex items-center gap-2">
                 <input
                   type="color"
@@ -202,7 +213,7 @@ export default function SettingsForm({ initial, hasLogo, sampleId }: { initial: 
 
       <div className="flex flex-col gap-4">
         <Card>
-          <CardHeader title="Logo" hint="PNG ou JPEG, 2 Mo maximum" />
+          <CardHeader title="Logo" hint="PNG ou JPEG, 1 Mo maximum" />
           <div className="p-5">
             <div className="grid h-28 place-items-center rounded-lg border border-dashed border-slate-300 bg-slate-50">
               {logo ? (
@@ -217,7 +228,7 @@ export default function SettingsForm({ initial, hasLogo, sampleId }: { initial: 
                 <ImagePlus size={16} /> {logo ? "Remplacer" : "Ajouter un logo"}
               </button>
               {logo ? (
-                <button type="button" onClick={deleteLogo} className={buttonSecondary} title="Supprimer le logo">
+                <button type="button" onClick={deleteLogo} className={buttonSecondary} title="Supprimer le logo" aria-label="Supprimer le logo">
                   <Trash2 size={16} />
                 </button>
               ) : null}
@@ -243,8 +254,8 @@ export default function SettingsForm({ initial, hasLogo, sampleId }: { initial: 
             </a>
           ) : null}
           <p className="mt-3 text-xs leading-relaxed text-slate-500">
-            À l&apos;enregistrement, tous les PDF du dossier <code className="rounded bg-slate-100 px-1">factures/</code> sont
-            régénérés avec les nouvelles informations. Les numéros déjà attribués ne changent pas.
+            {localDisk ? "À l'enregistrement, les PDF du dossier factures/ sont régénérés avec les nouvelles informations. " : ""}
+            Les numéros déjà attribués ne changent pas.
           </p>
         </Card>
       </div>

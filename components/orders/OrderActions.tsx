@@ -1,9 +1,9 @@
 "use client";
 
-import { Ban, CalendarClock, Check, Loader2, PackageCheck, Undo2, Wallet } from "lucide-react";
+import { Ban, CalendarClock, Check, Loader2, PackageCheck, Trash2, Undo2, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { addShopPayment, cancelOrder, completeOrder, scheduleOrder, setPaid, setPrepared, settleOrder } from "@/app/commandes/actions";
+import { addShopPayment, cancelOrder, completeOrder, removeExtra, scheduleOrder, setPaid, setPrepared, settleOrder } from "@/app/commandes/actions";
 import { eur } from "@/lib/format";
 import { toast } from "@/lib/client";
 import { isPickup, isStockComplete, orderBalance } from "@/lib/orders/logic";
@@ -57,6 +57,7 @@ export function ScheduleControl({ order, compact = false }: { order: Order; comp
           type="button"
           disabled={pending}
           title="Retirer la date"
+          aria-label="Retirer la date"
           onClick={() => {
             setDate("");
             run(() => scheduleOrder(order.id, null, ""), "Date retirée");
@@ -67,6 +68,27 @@ export function ScheduleControl({ order, compact = false }: { order: Order; comp
         </button>
       ) : null}
     </div>
+  );
+}
+
+/** Retire une prestation ajoutée par erreur (refusé si le client l'a déjà réglée). */
+export function RemoveExtraButton({ orderId, extraId, label }: { orderId: string; extraId: string; label: string }) {
+  const { pending, run } = useAction();
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      aria-label={`Retirer la prestation « ${label} »`}
+      title="Retirer cette prestation"
+      onClick={() =>
+        void confirmDialog({ title: `Retirer « ${label} » ?`, message: "La prestation sera retirée du total et du bon de commande.", confirmLabel: "Retirer", tone: "danger" }).then(
+          (ok) => ok && run(() => removeExtra(orderId, extraId), "Prestation retirée"),
+        )
+      }
+      className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+    >
+      {pending ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+    </button>
   );
 }
 

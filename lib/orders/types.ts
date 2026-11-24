@@ -33,7 +33,7 @@ export interface Extra {
   at: string;
 }
 
-export type PaymentMethod = "especes" | "carte" | "cheque" | "virement" | "";
+export type PaymentMethod = "especes" | "carte" | "virement" | "";
 
 /** Un encaissement : acompte au magasin, ou règlement reçu par le livreur. */
 export interface Payment {
@@ -69,7 +69,7 @@ export interface Customer {
 
 export interface Order {
   id: string;
-  /** Numéro du bon de livraison, ex. BL-2026-0001. */
+  /** Numéro du bon de commande, ex. BL-2026-0001. */
   number: string;
   createdAt: string;
   /** Magasin qui a pris la commande. */
@@ -100,6 +100,8 @@ export interface Order {
   geo: { lat: number; lon: number } | null;
   /** L'adresse n'a pas pu être placée sur la carte : inutile de réessayer à chaque ouverture. */
   geoFailed?: boolean;
+  /** E-mails envoyés au client pour cette commande. */
+  emails: { at: string; kind: string; to: string }[];
   history: { at: string; text: string }[];
 }
 
@@ -116,7 +118,7 @@ export interface Db {
   depot: Depot | null;
 }
 
-/** Données envoyées par le formulaire de création d'un bon de livraison. */
+/** Données envoyées par le formulaire de création d'un bon de commande. */
 export interface OrderInput {
   shop: ShopId;
   observations: string;
@@ -136,6 +138,8 @@ export interface OrderInput {
   slot: Slot;
   /** Heure prévue (HH:MM), facultative. */
   time?: string;
+  /** Envoyer le bon de commande par e-mail au client dès la création. */
+  sendEmail?: boolean;
 }
 
 export type Result<T = undefined> = { ok: true; data: T } | { ok: false; error: string };

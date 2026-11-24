@@ -17,7 +17,7 @@ export function TestBanner() {
         <span className="inline-flex items-center gap-2">
           <FlaskConical size={16} />
           <span className="sm:hidden">Mode test · commandes fictives</span>
-          <span className="hidden sm:inline">Mode test : commandes fictives, rien n&apos;est enregistré dans vos vraies données</span>
+          <span className="hidden sm:inline">Mode test : commandes, stock et planning fictifs. Vos vraies commandes ne sont pas touchées.</span>
         </span>
         <button
           type="button"
@@ -29,7 +29,7 @@ export function TestBanner() {
         </button>
       </div>
       {/* Rappel toujours visible, même après avoir fait défiler la page */}
-      <div className="pointer-events-none fixed bottom-20 left-3 z-[60] inline-flex items-center gap-1.5 rounded-full bg-amber-400 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-black shadow-lg md:bottom-4 md:left-[17rem]">
+      <div className="pointer-events-none fixed bottom-20 left-1/2 z-[60] inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-amber-400 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-black shadow-lg md:bottom-3">
         <FlaskConical size={14} /> Mode test
       </div>
     </>
@@ -71,7 +71,7 @@ export function TestModeSwitch({ active }: { active: boolean }) {
             <h2 className="text-xl font-semibold tracking-tight">{active ? "Mode test activé" : "Mode test"}</h2>
             <p className={`mt-0.5 text-sm ${active ? "text-black/70" : "text-neutral-400"}`}>
               {active
-                ? "Vous voyez des commandes fictives. Tout ce que vous faites ici reste à part de vos vraies données."
+                ? "Vous voyez des commandes fictives : commandes, stock, planning, magasinier et livreur restent à part de vos vraies données. Les factures Lenbox et les paramètres, eux, restent réels."
                 : "Essayez l'application avec sept commandes fictives : bons de commande, planning, magasinier, tournée du livreur."}
             </p>
           </div>
