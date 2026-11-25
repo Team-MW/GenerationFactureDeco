@@ -103,6 +103,90 @@ export async function adjustStock(articleId: string, delta: number) {
   );
 }
 
+/** Inventaire : fixe la quantité réellement disponible d'un article (comptage en magasin). */
+export async function setStock(articleId: string, quantity: number) {
+  return run(() =>
+    mutate((db) => {
+      const article = db.articles.find((a) => a.id === articleId);
+      if (!article) throw new UserError("Article introuvable.");
+      const value = Math.trunc(Number(quantity));
+      if (!Number.isFinite(value) || value < 0 || value > 99999) throw new UserError("Quantité invalide.");
+      const added = value > article.stock;
+      article.stock = value;
+      // Ce qui vient d'être compté en plus sert d'abord les commandes en attente.
+      if (added) allocate(db);
+      return article.stock;
+    }),
+  );
+}
+
+/** Fixe le prix de vente d'un article (saisie rapide dans le tableau du stock). */
+export async function setArticlePrice(articleId: string, price: number) {
+  return run(() =>
+    mutate((db) => {
+      const article = db.articles.find((a) => a.id === articleId);
+      if (!article) throw new UserError("Article introuvable.");
+      article.price = parsePrice(price, "Prix");
+      return undefined;
+    }),
+  );
+}
+
+export interface ImportedArticle {
+  reference: string;
+  name: string;
+  category: string;
+  dimensions: string;
+  color: string;
+  /** null = le fichier ne donne pas l'information : on ne touche pas à la valeur existante. */
+  price: number | null;
+  stock: number | null;
+}
+
+/**
+ * Import d'un fichier de produits. Un produit déjà connu (même référence) est mis à jour, les autres sont créés.
+ * `defaultStock` : quantité donnée aux nouveaux produits quand le fichier n'a pas de colonne de stock.
+ */
+export async function importArticles(rows: ImportedArticle[], defaultStock: number) {
+  return run(() =>
+    mutate((db) => {
+      if (!Array.isArray(rows) || rows.length === 0) throw new UserError("Le fichier ne contient aucun produit.");
+      if (rows.length > 3000) throw new UserError("Fichier trop volumineux (3 000 produits maximum par import).");
+      const initial = Math.min(99999, Math.max(0, Math.trunc(Number(defaultStock)) || 0));
+      const quantity = (value: unknown) => Math.min(99999, Math.max(0, Math.trunc(Number(value)) || 0));
+      const byReference = new Map(db.articles.filter((a) => a.reference).map((a) => [a.reference.toLowerCase(), a]));
+      let created = 0, updated = 0, restocked = false;
+      rows.forEach((row, index) => {
+        const name = clean(row?.name, 120);
+        if (!name) throw new UserError(`Ligne ${index + 2} : le nom du produit est vide.`);
+        const reference = clean(row.reference, 120);
+        const price = row.price === null || row.price === undefined ? null : parsePrice(row.price, `Ligne ${index + 2} : prix`);
+        const existing = reference ? byReference.get(reference.toLowerCase()) : undefined;
+        if (existing) {
+          existing.name = name;
+          existing.category = clean(row.category, 60);
+          existing.dimensions = clean(row.dimensions, 80);
+          existing.color = clean(row.color, 80);
+          if (price !== null && price > 0) existing.price = price;
+          if (row.stock !== null && row.stock !== undefined) {
+            const next = quantity(row.stock);
+            restocked ||= next > existing.stock;
+            existing.stock = next;
+          }
+          updated += 1;
+        } else {
+          const article = makeArticle(db, { name, reference, category: row.category, dimensions: row.dimensions, color: row.color, price: price ?? 0, stock: row.stock === null || row.stock === undefined ? initial : quantity(row.stock) });
+          if (reference) byReference.set(reference.toLowerCase(), article);
+          restocked ||= article.stock > 0;
+          created += 1;
+        }
+      });
+      if (restocked) allocate(db);
+      return { created, updated };
+    }),
+  );
+}
+
 /* ───────────────────────── Commandes ───────────────────────── */
 
 /** Recherche les coordonnées d'une adresse. Facultatif : un échec ne doit jamais faire échouer la commande. */
@@ -231,10 +315,10 @@ export async function setPrepared(orderId: string, prepared: boolean) {
     mutate((db) => {
       const order = findOrder(db, orderId);
       if (order.status !== "active") throw new UserError("Cette commande est clôturée.");
-      if (prepared && !isStockComplete(order)) throw new UserError("Impossible : des articles sont encore en attente de stock.");
+      // Le stock est indicatif : une commande se prépare même si un article n'y figure pas encore.
       order.prepared = prepared;
       order.preparedAt = prepared ? now() : null;
-      log(order, prepared ? "Commande préparée par le magasin" : "Préparation annulée");
+      log(order, prepared ? `Commande préparée par le magasin${isStockComplete(order) ? "" : " (un article n'était pas compté en stock)"}` : "Préparation annulée");
       return undefined;
     }),
   );
@@ -362,10 +446,12 @@ export async function completeOrder(orderId: string) {
     mutate((db) => {
       const order = findOrder(db, orderId);
       if (order.status !== "active") throw new UserError("Cette commande est déjà clôturée.");
-      if (!isStockComplete(order)) throw new UserError("Impossible : des articles sont encore en attente de stock.");
+      // Le stock est indicatif : la livraison n'est jamais bloquée par un article non compté en stock.
+      const missing = order.lines.filter((l) => !l.reserved);
       order.status = "done";
       order.doneAt = now();
       log(order, isPickup(order) ? "Commande retirée par le client" : "Commande livrée");
+      if (missing.length) log(order, `Remis sans être compté en stock : ${missing.map((l) => `${l.quantity} × ${l.name}`).join(", ")}`);
       return undefined;
     }),
   );

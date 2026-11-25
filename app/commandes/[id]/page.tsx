@@ -56,7 +56,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             <Card className="p-4 md:p-5">
               {order.scheduledDate && !isStockComplete(order) ? (
                 <div className="mb-4">
-                  <Warning>Une date est fixée mais un article manque encore en stock.</Warning>
+                  <Warning>Une date est fixée et un article n&apos;est pas compté en stock : la commande reste préparable et livrable.</Warning>
                 </div>
               ) : null}
               <OrderActions order={order} />

@@ -15,7 +15,7 @@ export default async function StockPage() {
   return (
     <SectionShell companyName={(await getSettings()).companyName} section="Stock" nav={[{ href: "/stock", label: "Tout le stock", short: "Stock", icon: "stock" }]}>
       <AutoRefresh />
-      <PageHeader title="Stock" subtitle="Tous les produits dans un seul tableau · cliquez sur un titre de colonne pour trier" />
+      <PageHeader title="Stock" subtitle="Produits et quantités · une entrée de stock sert d'abord les commandes en attente" />
       <StockGrid rows={rows} />
     </SectionShell>
   );

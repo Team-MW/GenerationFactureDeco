@@ -67,12 +67,12 @@ function OrderCard({ order }: { order: Order }) {
       ) : (
         <button
           type="button"
-          disabled={pending || !complete}
+          disabled={pending}
           onClick={() => run(() => setPrepared(order.id, true), "Commande préparée")}
           className={`${buttonPrimary} mt-3 w-full justify-center py-3`}
         >
           {pending ? <Loader2 size={16} className="animate-spin" /> : <PackageCheck size={18} />}
-          {complete ? "Marquer comme préparée" : "En attente de stock"}
+          {complete ? "Marquer comme préparée" : "Marquer comme préparée (article hors stock)"}
         </button>
       )}
     </Card>

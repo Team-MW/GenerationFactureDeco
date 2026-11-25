@@ -12,13 +12,13 @@ const SPACES = [
   {
     href: "/commandes",
     title: "Gestion commandes",
-    description: "Bons de commande, stock, planning des livraisons et tableau des ventes.",
+    description: "Bons de commande, planning des livraisons, stock et tableau des ventes.",
     icon: Package,
   },
   {
     href: "/stock",
     title: "Stock",
-    description: "Tout le stock dans un grand tableau : recherche, ajout de produits, entrées et sorties.",
+    description: "Produits et quantités dans un grand tableau : recherche, comptage, ajout et import de produits.",
     icon: Boxes,
   },
   {

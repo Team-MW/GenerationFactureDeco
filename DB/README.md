@@ -39,7 +39,7 @@ lire les données clients. Le fichier `03_securite.sql` lui interdit tout accès
 ## Autres fichiers
 
 - `04_requetes_utiles.sql` : requêtes de consultation, à lancer à la demande.
-- `06_inventaire.sql` : ajoute la catégorie, les dimensions et le coloris aux articles, met à jour la fonction d'enregistrement et importe le catalogue (113 produits). À lancer une fois sur une base déjà installée ; inutile pour une installation neuve suivie d'un import par la page Inventaire.
+- `06_inventaire.sql` : ajoute la catégorie, les dimensions et le coloris aux articles, met à jour la fonction d'enregistrement et importe le stock (113 produits, une pièce chacun). À lancer une fois sur une base déjà installée ; inutile pour une installation neuve suivie d'un import par la page Inventaire.
 - `05_nettoyage_premiere_version.sql` : facultatif, supprime les trois tables sans préfixe créées par la toute première installation (seulement si elles sont vides). À ne lancer que dans un projet dédié à cette application.
 
 ## Faire évoluer la base

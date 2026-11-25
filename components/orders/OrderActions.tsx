@@ -158,7 +158,7 @@ export default function OrderActions({ order }: { order: Order }) {
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <button
           type="button"
-          disabled={pending || (!order.prepared && !complete)}
+          disabled={pending}
           onClick={() => run(() => setPrepared(order.id, !order.prepared), order.prepared ? "Préparation annulée" : "Commande marquée préparée")}
           className={`${buttonSecondary} justify-center`}
         >
@@ -166,7 +166,7 @@ export default function OrderActions({ order }: { order: Order }) {
         </button>
         <button
           type="button"
-          disabled={pending || !complete}
+          disabled={pending}
           onClick={() => run(() => completeOrder(order.id), pickup ? "Commande retirée" : "Commande livrée")}
           className={`${buttonPrimary} justify-center`}
         >
@@ -189,7 +189,7 @@ export default function OrderActions({ order }: { order: Order }) {
           <Ban size={16} /> Annuler la commande
         </button>
       </div>
-      {!complete ? <p className="text-xs text-slate-500">La préparation et la livraison seront possibles dès que tous les articles seront en stock.</p> : null}
+      {!complete ? <p className="text-xs text-slate-500">Un article n&apos;est pas compté en stock : la commande peut quand même être préparée et livrée.</p> : null}
     </div>
   );
 }

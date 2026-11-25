@@ -7,7 +7,8 @@
 --    celle que les bons de commande utilisent déjà).
 -- 2. Met à jour la fonction d'enregistrement pour qu'elle écrive ces trois champs.
 -- 3. Importe les 113 produits du fichier Decoshop_Produits_Import.csv.
---    Stock de départ : 0 (à saisir dans la page Inventaire). Prix 0 = « prix à définir ».
+--    Chaque ligne du fichier est une pièce en magasin : stock de départ 1 (à ajuster dans la page Stock).
+--    Prix 0 = « prix à définir ».
 -- ============================================================================
 
 -- 1 · Nouvelles colonnes
@@ -87,7 +88,7 @@ $$;
 
 -- 3 · Produits (ignorés s'ils existent déjà avec la même référence)
 insert into public.deco_articles (id, name, reference, category, dimensions, color, price, stock)
-select substr(md5(v.reference), 1, 12), v.name, v.reference, v.category, v.dimensions, v.color, v.price, 0
+select substr(md5(v.reference), 1, 12), v.name, v.reference, v.category, v.dimensions, v.color, v.price, 1
   from (values
     ('DS-BUFFETS-BUFFET-CALYPSO-180-NOYER-TRAVERTIN', 'Buffet Calypso', 'Buffets', '180', 'Noyer / travertin', 0),
     ('DS-CANAPES-BODRUM-BLANC', 'Bodrum', 'Canapés', '', 'Blanc', 0),
@@ -209,10 +210,11 @@ on conflict (id) do nothing;
 -- L'application relit les données dès que ce numéro change.
 update public.deco_gestion_meta set version = version + 1;
 
--- Contrôle : nombre de produits par catégorie.
+-- Contrôle : nombre de produits et de pièces par catégorie.
 select coalesce(nullif(category, ''), '(sans catégorie)') as categorie,
        count(*)                                  as produits,
-       count(*) filter (where price = 0)         as sans_prix
+       count(*) filter (where price = 0)         as sans_prix,
+       sum(stock)                                as pieces_en_stock
   from public.deco_articles
  group by 1
  order by 1;

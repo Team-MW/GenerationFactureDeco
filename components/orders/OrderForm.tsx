@@ -180,7 +180,7 @@ export default function OrderForm({ articles, agenda, today, mailReady, testMode
         </Card>
 
         <Card>
-          <CardHeader title="Articles" hint="Sélectionnez un produit de l'inventaire ou créez-en un nouveau" />
+          <CardHeader title="Articles" hint="Sélectionnez un produit du stock ou créez-en un nouveau" />
           <div className="p-4 md:p-5">
             <div className="relative">
               <Search size={16} className="pointer-events-none absolute left-3 top-3 text-slate-400" />
@@ -482,7 +482,7 @@ export default function OrderForm({ articles, agenda, today, mailReady, testMode
           {waiting > 0 ? (
             <p className="mt-4 flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
               <Hourglass size={14} className="mt-0.5 shrink-0" />
-              {waiting} article{waiting > 1 ? "s" : ""} en attente de stock : la commande sera livrable dès leur arrivée.
+              {waiting} article{waiting > 1 ? "s" : ""} hors stock pour l&apos;instant : la commande est enregistrée normalement et reste préparable et livrable.
             </p>
           ) : null}
           <button type="submit" disabled={saving} className={`${buttonPrimary} mt-5 w-full justify-center py-2.5`}>

@@ -2,7 +2,7 @@ import AutoRefresh from "@/components/AutoRefresh";
 import SectionShell from "@/components/orders/SectionShell";
 import WarehouseBoard from "@/components/orders/WarehouseBoard";
 import { PageHeader } from "@/components/ui";
-import { isPickup, isStockComplete, parisToday, sortKey } from "@/lib/orders/logic";
+import { isPickup, parisToday, sortKey } from "@/lib/orders/logic";
 import { loadDb } from "@/lib/orders/store";
 import { getSettings } from "@/lib/settings";
 
@@ -12,9 +12,9 @@ export const metadata = { title: "Magasinier" };
 export default async function WarehousePage() {
   const { orders } = await loadDb();
   const active = orders.filter((o) => o.status === "active");
-  // À préparer : tout ce qui a une date ; les retraits sans date dès que le stock est complet.
+  // À préparer : tout ce qui a une date, et les retraits sans date (le stock n'est jamais bloquant).
   const upcoming = active.filter((o) => o.scheduledDate).sort((a, b) => a.scheduledDate!.localeCompare(b.scheduledDate!) || sortKey(a).localeCompare(sortKey(b)));
-  const undated = active.filter((o) => !o.scheduledDate && isPickup(o) && isStockComplete(o));
+  const undated = active.filter((o) => !o.scheduledDate && isPickup(o));
   const history = orders
     .filter((o) => o.preparedAt && (o.status !== "active" || o.prepared))
     .sort((a, b) => b.preparedAt!.localeCompare(a.preparedAt!))

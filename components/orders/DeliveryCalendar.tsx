@@ -443,8 +443,9 @@ export default function DeliveryCalendar({ orders, today }: { orders: Order[]; t
   const picked = orders.find((o) => o.id === pickedId) ?? null;
 
   const tomorrow = addDays(today, 1);
-  const toSchedule = active.filter((o) => !o.scheduledDate && isStockComplete(o));
-  const waiting = active.filter((o) => !o.scheduledDate && !isStockComplete(o));
+  // Le stock n'est jamais bloquant : toute commande sans date peut être programmée.
+  const toSchedule = active.filter((o) => !o.scheduledDate);
+  const waiting = active.filter((o) => !isStockComplete(o));
   const late = active.filter((o) => o.scheduledDate && o.scheduledDate < today);
   const toRemind = active.filter((o) => (o.scheduledDate === today || o.scheduledDate === tomorrow) && !o.reminded);
   const blocked = active.filter((o) => o.scheduledDate && o.scheduledDate >= today && !isStockComplete(o));
@@ -600,7 +601,7 @@ export default function DeliveryCalendar({ orders, today }: { orders: Order[]; t
               ))}
               {blocked.map((order) => (
                 <OrderRow key={`blocked-${order.id}`} order={order}>
-                  <p className="mt-1 text-xs font-medium text-amber-800">Programmée mais un article manque encore en stock.</p>
+                  <p className="mt-1 text-xs font-medium text-amber-800">Programmée ; un article n&apos;est pas encore compté en stock.</p>
                 </OrderRow>
               ))}
               {toRemind.map((order) => (
@@ -611,9 +612,9 @@ export default function DeliveryCalendar({ orders, today }: { orders: Order[]; t
         </Card>
 
         <Card className="overflow-hidden">
-          <CardHeader title="En attente de stock" hint="Passeront « à programmer » à l'arrivée des articles" />
+          <CardHeader title="Articles hors stock" hint="Pour information : ces commandes restent programmables, préparables et livrables" />
           {waiting.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-slate-500">Aucune commande en attente.</p>
+            <p className="px-4 py-6 text-sm text-slate-500">Aucun article manquant.</p>
           ) : (
             <ul className="mt-2 divide-y divide-slate-100 border-t border-slate-100">
               {waiting.map((order) => (

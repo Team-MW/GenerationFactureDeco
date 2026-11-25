@@ -98,7 +98,8 @@ export function orderStage(order: Order): Stage {
   if (order.status === "cancelled") return "annulee";
   if (order.status === "done") return "terminee";
   if (order.scheduledDate) return "programmee";
-  return isStockComplete(order) ? "a_programmer" : "attente";
+  // Le stock est indicatif (voir le badge de stock) : une commande sans date est toujours « à programmer ».
+  return "a_programmer";
 }
 
 export function stageLabel(order: Order): string {

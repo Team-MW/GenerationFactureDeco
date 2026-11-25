@@ -14,6 +14,30 @@ export interface MapPoint {
   depot?: boolean;
 }
 
+/**
+ * Retire une carte sans faire planter Leaflet.
+ * Un zoom met un quart de seconde à se terminer ; si la carte est détruite entre-temps (changement de page ou de
+ * jour pendant le zoom), Leaflet lit des éléments déjà supprimés : « Cannot read properties of undefined
+ * (reading '_leaflet_pos') ». On coupe donc d'abord toute interaction, puis on détruit la carte une fois
+ * l'animation en cours forcément terminée.
+ */
+function destroy(map: LeafletMap) {
+  try {
+    map.stop();
+    for (const handler of [map.scrollWheelZoom, map.dragging, map.touchZoom, map.doubleClickZoom, map.boxZoom, map.keyboard]) handler?.disable();
+  } catch {
+    // carte déjà retirée
+  }
+  setTimeout(() => {
+    try {
+      map.off();
+      map.remove();
+    } catch {
+      // carte déjà retirée
+    }
+  }, 700);
+}
+
 /** Carte OpenStreetMap : étapes numérotées et tracé de l'itinéraire. */
 export default function RouteMap({ points, route }: { points: MapPoint[]; route: [number, number][] | null }) {
   const container = useRef<HTMLDivElement>(null);
@@ -27,6 +51,11 @@ export default function RouteMap({ points, route }: { points: MapPoint[]; route:
     (async () => {
       const L = (await import("leaflet")).default;
       if (cancelled || !container.current) return;
+      // Le cadre a été recréé (mode développement, retour sur la page) : l'ancienne carte ne vaut plus rien.
+      if (map.current && map.current.getContainer() !== container.current) {
+        destroy(map.current);
+        map.current = null;
+      }
       if (!map.current) {
         map.current = L.map(container.current, { zoomControl: true, attributionControl: true }).setView([46.6, 2.4], 6);
         L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -55,7 +84,10 @@ export default function RouteMap({ points, route }: { points: MapPoint[]; route:
         L.marker([point.lat, point.lon], { icon, title: point.title }).addTo(current).bindPopup(popup);
       }
       if (points.length > 0) {
-        current.fitBounds(L.latLngBounds(points.map((p) => [p.lat, p.lon] as [number, number])), { padding: [36, 36], maxZoom: 14 });
+        // Recadrage immédiat, sans animation : une animation encore en cours au moment où la carte est retirée
+        // (changement de page, de jour, rafraîchissement) fait planter Leaflet (« _leaflet_pos »).
+        current.invalidateSize({ animate: false });
+        current.fitBounds(L.latLngBounds(points.map((p) => [p.lat, p.lon] as [number, number])), { padding: [36, 36], maxZoom: 14, animate: false });
       }
     })();
     return () => {
@@ -66,7 +98,7 @@ export default function RouteMap({ points, route }: { points: MapPoint[]; route:
 
   useEffect(
     () => () => {
-      map.current?.remove();
+      if (map.current) destroy(map.current);
       map.current = null;
     },
     [],

@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { addExtra, collectPayment, completeOrder, locateAddress, locateDeliveries } from "@/app/commandes/actions";
 import { toast } from "@/lib/client";
 import { eur } from "@/lib/format";
-import { DELIVERY_MODES, PAYMENT_METHODS, shopName, addDays, dayLabel, fullAddress, isStockComplete, orderBalance, parisDate, sortKey, timeLabel } from "@/lib/orders/logic";
+import { DELIVERY_MODES, PAYMENT_METHODS, shopName, addDays, dayLabel, fullAddress, orderBalance, parisDate, sortKey, timeLabel } from "@/lib/orders/logic";
 import { solveOpenPath, solveRoundTrip } from "@/lib/orders/tour";
 import type { Depot, Order, PaymentMethod } from "@/lib/orders/types";
 import { Card, buttonPrimary, buttonSecondary } from "../ui";
@@ -263,7 +263,7 @@ function Stop({ order, index, next }: { order: Order; index: number; next: boole
           </a>
           <button
             type="button"
-            disabled={pending || !isStockComplete(order)}
+            disabled={pending}
             onClick={() => {
               void confirmDialog({
                 title: `Confirmer la livraison chez ${order.customer.name} ?`,
