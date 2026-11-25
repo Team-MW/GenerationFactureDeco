@@ -1,4 +1,4 @@
-import { ArrowUpRight, CreditCard, Package, PackageCheck, Truck } from "lucide-react";
+import { ArrowUpRight, Boxes, CreditCard, Package, PackageCheck, Truck } from "lucide-react";
 import Link from "next/link";
 import { accessPassword } from "@/lib/access";
 import { getSettings } from "@/lib/settings";
@@ -14,6 +14,12 @@ const SPACES = [
     title: "Gestion commandes",
     description: "Bons de commande, stock, planning des livraisons et tableau des ventes.",
     icon: Package,
+  },
+  {
+    href: "/stock",
+    title: "Stock",
+    description: "Tout le stock dans un grand tableau : recherche, ajout de produits, entrées et sorties.",
+    icon: Boxes,
   },
   {
     href: "/magasinier",

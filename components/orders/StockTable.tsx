@@ -5,22 +5,18 @@ import { useMemo, useState } from "react";
 import { adjustStock, createArticle, updateArticle } from "@/app/commandes/actions";
 import { eur } from "@/lib/format";
 import { articleDetails } from "@/lib/orders/logic";
+import type { StockRow } from "@/lib/orders/stock";
 import type { Article } from "@/lib/orders/types";
 import { Card, buttonPrimary, buttonSecondary } from "../ui";
 import { useAction } from "./OrderActions";
 import { inputClass } from "./bits";
 
-export interface StockRow extends Article {
-  /** Quantité mise de côté pour des commandes en cours. */
-  reserved: number;
-  /** Quantité commandée par des clients mais pas encore en stock. */
-  waiting: number;
-}
+export type { StockRow } from "@/lib/orders/stock";
 
 const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 const num = (s: string) => Number(String(s).replace(",", ".")) || 0;
 
-function ArticleForm({ article, categories, onClose }: { article?: Article; categories: string[]; onClose: () => void }) {
+export function ArticleForm({ article, categories, onClose }: { article?: Article; categories: string[]; onClose: () => void }) {
   const { pending, run } = useAction();
   const [name, setName] = useState(article?.name ?? "");
   const [reference, setReference] = useState(article?.reference ?? "");
@@ -91,7 +87,7 @@ function ArticleForm({ article, categories, onClose }: { article?: Article; cate
   );
 }
 
-function StockEntry({ article }: { article: StockRow }) {
+export function StockEntry({ article }: { article: StockRow }) {
   const { pending, run } = useAction();
   const [quantity, setQuantity] = useState("");
   const apply = (sign: 1 | -1) => {

@@ -1,4 +1,5 @@
-import StockTable, { type StockRow } from "@/components/orders/StockTable";
+import StockTable from "@/components/orders/StockTable";
+import { stockRows } from "@/lib/orders/stock";
 import { PageHeader } from "@/components/ui";
 import { loadDb } from "@/lib/orders/store";
 
@@ -6,16 +7,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Inventaire" };
 
 export default async function StockPage() {
-  const { articles, orders } = await loadDb();
-  const rows: StockRow[] = articles.map((article) => ({ ...article, reserved: 0, waiting: 0 }));
-  const byId = new Map(rows.map((r) => [r.id, r]));
-  for (const order of orders) {
-    if (order.status !== "active") continue;
-    for (const line of order.lines) {
-      const row = byId.get(line.articleId);
-      if (row) row[line.reserved ? "reserved" : "waiting"] += line.quantity;
-    }
-  }
+  const rows = stockRows(await loadDb());
   const toRestock = rows.filter((r) => r.waiting > 0).length;
   const inStock = rows.filter((r) => r.stock > 0).length;
   const noPrice = rows.filter((r) => r.price === 0).length;
