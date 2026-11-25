@@ -11,7 +11,13 @@ export const now = () => new Date().toISOString();
 export const round2 = (n: number) => Math.round(n * 100) / 100;
 export const clean = (value: unknown, max = 200) => String(value ?? "").trim().slice(0, max);
 export const frDate = (date: string) => date.split("-").reverse().join("/");
-export const isDate = (value: unknown): value is string => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+/** Date AAAA-MM-JJ qui existe vraiment (pas de 31 février). */
+export const isDate = (value: unknown): value is string => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const time = Date.parse(`${value}T12:00:00Z`);
+  return !Number.isNaN(time) && new Date(time).toISOString().slice(0, 10) === value;
+};
+const EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]{2,}$/;
 
 export const euros = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
 
@@ -65,6 +71,7 @@ export function insertOrder(db: Db, input: OrderInput, prefix: string): Order {
     city: clean(input.customer.city, 80),
     notes: clean(input.customer.notes, 500),
   };
+  if (customer.email && !EMAIL.test(customer.email)) throw new UserError("L'adresse e-mail du client est invalide.");
   if (mode !== "retrait" && (!customer.address || !customer.city)) {
     throw new UserError("L'adresse et la ville sont obligatoires pour une livraison.");
   }

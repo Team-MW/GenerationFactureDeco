@@ -1,6 +1,6 @@
 import { dateLong, eur } from "../format";
 import type { Settings } from "../types";
-import { DELIVERY_MODES, PAYMENT_SENTENCE, fullAddress, hourLabel, isPickup, orderBalance } from "./logic";
+import { DELIVERY_MODES, PAYMENT_SENTENCE, fullAddress, hourLabel, isPickup, orderBalance, signatureMatches } from "./logic";
 import type { Order } from "./types";
 
 /** Les trois messages envoyés au client autour d'une commande. */
@@ -43,12 +43,12 @@ function content(kind: EmailKind, order: Order, settings: Settings, signUrl: str
     ...(balance.paid > 0 ? ([["Déjà réglé", eur(balance.paid)]] as [string, string][]) : []),
     ["Reste à payer", balance.settled ? "0,00 € · commande réglée" : eur(balance.rest)],
   ];
-  const place: [string, string][] = pickup ? [["Retrait", "Au magasin"]] : [["Adresse", fullAddress(order)], ["Formule", mode]];
+  const place: [string, string][] = pickup ? [["Lieu", "Au magasin"]] : [["Adresse", fullAddress(order)], ["Formule", mode]];
   const contact = [settings.phone, settings.email].filter(Boolean).join(" · ");
   const question = contact ? `Pour toute question : ${contact}.` : "";
 
-  // Le client n'est invité à signer que si le bon ne l'est pas déjà.
-  const toSign = Boolean(signUrl) && !order.signature;
+  // Le client est invité à signer tant que le bon actuel ne l'est pas (jamais signé, ou modifié depuis).
+  const toSign = Boolean(signUrl) && !signatureMatches(order);
 
   switch (kind) {
     case "bon":

@@ -18,11 +18,11 @@ const TOKEN = /^[0-9a-f]{32,64}$/;
 /** Retrouve la commande d'un lien de signature (vraies commandes, puis jeu de test). */
 export async function findBySignToken(token: string): Promise<{ order: Order; scope: Scope } | null> {
   if (!TOKEN.test(token)) return null;
-  for (const fresh of [false, true]) {
-    for (const scope of ["real", "test"] as const) {
-      const order = (await loadScope(scope, fresh)).orders.find((o) => o.signToken === token);
-      if (order) return { order, scope };
-    }
+  // Lecture directe en base, jamais depuis le cache : en ligne, la page qui s'affiche après la signature
+  // peut être servie par un autre serveur que celui qui vient de l'enregistrer.
+  for (const scope of ["real", "test"] as const) {
+    const order = (await loadScope(scope, true)).orders.find((o) => o.signToken === token);
+    if (order) return { order, scope };
   }
   return null;
 }
