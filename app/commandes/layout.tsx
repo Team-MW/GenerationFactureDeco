@@ -7,7 +7,7 @@ const NAV: NavItem[] = [
   { href: "/commandes", label: "Commandes", short: "Commandes", icon: "orders", exact: true },
   { href: "/commandes/nouveau", label: "Nouveau bon", short: "Nouveau", icon: "plus" },
   { href: "/commandes/livraisons", label: "Espace livraison", short: "Livraisons", icon: "calendar" },
-  { href: "/commandes/stock", label: "Stock", short: "Stock", icon: "stock" },
+  { href: "/commandes/stock", label: "Inventaire", short: "Inventaire", icon: "stock" },
   { href: "/commandes/ventes", label: "Tableau des ventes", short: "Ventes", icon: "chart" },
   { href: "/parametres", label: "Paramètres", short: "Réglages", icon: "settings" },
 ];

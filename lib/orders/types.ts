@@ -7,11 +7,26 @@ export interface Article {
   id: string;
   name: string;
   reference: string;
-  /** Prix de vente TTC, en euros. */
+  /** Famille de produits (« Canapés », « Tables basses »…), vide si non classé. */
+  category: string;
+  /** Dimensions ou configuration (« 300 × 200 cm », « Angle gauche »…). */
+  dimensions: string;
+  color: string;
+  /** Prix de vente TTC, en euros. 0 = prix pas encore défini. */
   price: number;
   /** Quantité disponible (non réservée par une commande). */
   stock: number;
   createdAt: string;
+}
+
+/** Fiche d'un article telle qu'on la saisit (inventaire ou bon de commande). */
+export interface ArticleInput {
+  name: string;
+  reference: string;
+  price: number;
+  category?: string;
+  dimensions?: string;
+  color?: string;
 }
 
 export interface OrderLine {
@@ -146,7 +161,9 @@ export interface OrderInput {
     /** Article existant… */
     articleId?: string;
     /** …ou article à créer. */
-    newArticle?: { name: string; reference: string; price: number; stock: number };
+    newArticle?: ArticleInput & { stock: number };
+    /** Prix saisi sur le bon pour un article de l'inventaire qui n'en a pas encore : il est enregistré sur l'article. */
+    price?: number;
     quantity: number;
   }[];
   discount: Discount;

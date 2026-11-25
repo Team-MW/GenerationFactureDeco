@@ -24,6 +24,9 @@ interface ArticleRow {
   id: string;
   name: string;
   reference: string;
+  category?: string | null;
+  dimensions?: string | null;
+  color?: string | null;
   price: number;
   stock: number;
   created_at: string;
@@ -54,6 +57,10 @@ const articleFromRow = (r: ArticleRow): Article => ({
   id: r.id,
   name: r.name,
   reference: r.reference,
+  // Colonnes ajoutées par DB/06_inventaire.sql : absentes tant que ce script n'a pas été lancé.
+  category: r.category ?? "",
+  dimensions: r.dimensions ?? "",
+  color: r.color ?? "",
   price: Number(r.price),
   stock: Number(r.stock),
   createdAt: r.created_at,
@@ -63,6 +70,9 @@ const articleToRow = (a: Article): ArticleRow => ({
   id: a.id,
   name: a.name,
   reference: a.reference,
+  category: a.category,
+  dimensions: a.dimensions,
+  color: a.color,
   price: a.price,
   stock: a.stock,
   created_at: a.createdAt,
@@ -184,6 +194,7 @@ function loadFile(): Db {
   }
   try {
     const db: Db = { ...empty(), ...JSON.parse(text) };
+    for (const article of db.articles) withArticleDefaults(article);
     // Commandes enregistrées avant l'ajout de ces champs.
     for (const order of db.orders) {
       order.shop ??= "toulouse";
@@ -274,6 +285,14 @@ async function writeTest(next: TestState, expectedVersion: number | null): Promi
   return true;
 }
 
+/** Articles enregistrés avant l'ajout de la catégorie, des dimensions et du coloris. */
+function withArticleDefaults(article: Article): Article {
+  article.category ??= "";
+  article.dimensions ??= "";
+  article.color ??= "";
+  return article;
+}
+
 /** Commandes de test enregistrées avant l'ajout de ces champs. */
 function withDefaults(order: Order): Order {
   order.emails ??= [];
@@ -287,6 +306,7 @@ async function loadTest(): Promise<TestState> {
   const existing = await readTest();
   if (existing?.db) {
     for (const order of existing.db.orders) withDefaults(order);
+    existing.db.articles.forEach(withArticleDefaults);
     return existing;
   }
   const fresh: TestState = { version: 1, db: demoDb() };
@@ -361,6 +381,7 @@ export async function loadScope(scope: Scope, fresh = false): Promise<Db> {
     const state = await readTest();
     if (!state?.db) return empty();
     state.db.orders.forEach(withDefaults);
+    state.db.articles.forEach(withArticleDefaults);
     return state.db;
   }
   if (!USES_SUPABASE) return loadFile();

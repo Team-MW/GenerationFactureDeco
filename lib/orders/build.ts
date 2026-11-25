@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { DELIVERY_MODES, cleanTime, orderTotals, parisToday, slotOfTime } from "./logic";
+import { DELIVERY_MODES, articleLabel, cleanTime, orderTotals, parisToday, slotOfTime } from "./logic";
 import type { Article, Db, Order, OrderInput } from "./types";
 
 /** Briques communes à la création d'articles et de commandes (utilisées par les actions et par la simulation). */
@@ -39,15 +39,23 @@ export function parseQuantity(value: unknown): number {
   return n;
 }
 
-export function makeArticle(db: Db, input: { name: unknown; reference: unknown; price: unknown; stock: unknown }): Article {
+/** Champs descriptifs d'un article, nettoyés. La référence, si elle est renseignée, doit être unique. */
+export function articleFields(db: Db, input: { name: unknown; reference: unknown; price: unknown; category?: unknown; dimensions?: unknown; color?: unknown }, selfId?: string) {
   const name = clean(input.name, 120);
   if (!name) throw new UserError("Le nom de l'article est obligatoire.");
+  const reference = clean(input.reference, 120);
+  if (reference && db.articles.some((a) => a.id !== selfId && a.reference.toLowerCase() === reference.toLowerCase())) {
+    throw new UserError(`La référence « ${reference} » est déjà utilisée par un autre article.`);
+  }
+  return { name, reference, category: clean(input.category, 60), dimensions: clean(input.dimensions, 80), color: clean(input.color, 80), price: parsePrice(input.price, "Prix") };
+}
+
+export function makeArticle(db: Db, input: { name: unknown; reference: unknown; price: unknown; stock: unknown; category?: unknown; dimensions?: unknown; color?: unknown }): Article {
+  const fields = articleFields(db, input);
   const stock = Math.max(0, Math.floor(Number(input.stock) || 0));
   const article: Article = {
     id: id(),
-    name,
-    reference: clean(input.reference, 40),
-    price: parsePrice(input.price, "Prix"),
+    ...fields,
     stock,
     createdAt: now(),
   };
@@ -83,13 +91,16 @@ export function insertOrder(db: Db, input: OrderInput, prefix: string): Order {
       ? makeArticle(db, line.newArticle)
       : db.articles.find((a) => a.id === line.articleId);
     if (!article) throw new UserError("Un article sélectionné n'existe plus.");
+    // Article de l'inventaire encore sans prix : celui saisi sur le bon est enregistré sur sa fiche.
+    if (article.price === 0 && line.price !== undefined) article.price = parsePrice(line.price, `Prix de « ${article.name} »`);
+    if (article.price <= 0) throw new UserError(`Indiquez le prix de « ${articleLabel(article)} ».`);
     // Le stock est réservé tout de suite s'il suffit ; sinon la ligne passe « en attente ».
     const reserved = article.stock >= quantity;
     if (reserved) article.stock -= quantity;
     return {
       id: id(),
       articleId: article.id,
-      name: article.name,
+      name: articleLabel(article),
       reference: article.reference,
       unitPrice: article.price,
       quantity,

@@ -4,6 +4,7 @@ import { Check, Hourglass, Loader2, Pencil, Plus, Search, X } from "lucide-react
 import { useMemo, useState } from "react";
 import { adjustStock, createArticle, updateArticle } from "@/app/commandes/actions";
 import { eur } from "@/lib/format";
+import { articleDetails } from "@/lib/orders/logic";
 import type { Article } from "@/lib/orders/types";
 import { Card, buttonPrimary, buttonSecondary } from "../ui";
 import { useAction } from "./OrderActions";
@@ -19,38 +20,58 @@ export interface StockRow extends Article {
 const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 const num = (s: string) => Number(String(s).replace(",", ".")) || 0;
 
-function ArticleForm({ article, onClose }: { article?: Article; onClose: () => void }) {
+function ArticleForm({ article, categories, onClose }: { article?: Article; categories: string[]; onClose: () => void }) {
   const { pending, run } = useAction();
   const [name, setName] = useState(article?.name ?? "");
   const [reference, setReference] = useState(article?.reference ?? "");
-  const [price, setPrice] = useState(article ? String(article.price) : "");
+  const [category, setCategory] = useState(article?.category ?? "");
+  const [dimensions, setDimensions] = useState(article?.dimensions ?? "");
+  const [color, setColor] = useState(article?.color ?? "");
+  const [price, setPrice] = useState(article && article.price > 0 ? String(article.price) : "");
   const [stock, setStock] = useState("0");
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     run(
       async () => {
         const result = article
-          ? await updateArticle(article.id, { name, reference, price: num(price) })
-          : await createArticle({ name, reference, price: num(price), stock: Math.floor(num(stock)) });
+          ? await updateArticle(article.id, { name, reference, category, dimensions, color, price: num(price) })
+          : await createArticle({ name, reference, category, dimensions, color, price: num(price), stock: Math.floor(num(stock)) });
         if (result.ok) onClose();
         return result;
       },
-      article ? "Article modifié" : "Article créé",
+      article ? "Produit modifié" : "Produit ajouté à l'inventaire",
     );
   };
   return (
     <form onSubmit={submit} className="grid grid-cols-2 gap-3 border-b border-slate-100 bg-slate-50 p-4 sm:grid-cols-6">
       <label className="col-span-2 sm:col-span-3">
-        <span className="mb-1 block text-xs font-medium text-slate-700">Nom de l&apos;article</span>
+        <span className="mb-1 block text-xs font-medium text-slate-700">Nom du produit</span>
         <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
       </label>
-      <label className="col-span-2 sm:col-span-1">
+      <label className="col-span-2 sm:col-span-3">
+        <span className="mb-1 block text-xs font-medium text-slate-700">Catégorie</span>
+        <input className={inputClass} list="categories-inventaire" placeholder="Ex. : Canapés" value={category} onChange={(e) => setCategory(e.target.value)} />
+        <datalist id="categories-inventaire">
+          {categories.map((c) => (
+            <option key={c} value={c} />
+          ))}
+        </datalist>
+      </label>
+      <label className="col-span-2 sm:col-span-2">
+        <span className="mb-1 block text-xs font-medium text-slate-700">Dimensions / configuration</span>
+        <input className={inputClass} placeholder="Ex. : 300 × 200 cm" value={dimensions} onChange={(e) => setDimensions(e.target.value)} />
+      </label>
+      <label className="col-span-2 sm:col-span-2">
+        <span className="mb-1 block text-xs font-medium text-slate-700">Coloris</span>
+        <input className={inputClass} value={color} onChange={(e) => setColor(e.target.value)} />
+      </label>
+      <label className="col-span-2 sm:col-span-2">
         <span className="mb-1 block text-xs font-medium text-slate-700">Référence</span>
         <input className={inputClass} value={reference} onChange={(e) => setReference(e.target.value)} />
       </label>
       <label>
         <span className="mb-1 block text-xs font-medium text-slate-700">Prix TTC (€)</span>
-        <input className={inputClass} inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} required />
+        <input className={inputClass} inputMode="decimal" placeholder="À définir" value={price} onChange={(e) => setPrice(e.target.value)} />
       </label>
       {article ? null : (
         <label>
@@ -60,7 +81,7 @@ function ArticleForm({ article, onClose }: { article?: Article; onClose: () => v
       )}
       <div className="col-span-2 flex gap-2 sm:col-span-6">
         <button type="submit" disabled={pending} className={buttonPrimary}>
-          {pending ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} {article ? "Enregistrer" : "Créer l'article"}
+          {pending ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} {article ? "Enregistrer" : "Ajouter le produit"}
         </button>
         <button type="button" onClick={onClose} className={buttonSecondary}>
           Annuler
@@ -110,37 +131,81 @@ export default function StockTable({ rows }: { rows: StockRow[] }) {
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  const [category, setCategory] = useState("");
+  const [only, setOnly] = useState<"" | "stock" | "rupture" | "prix">("");
 
+  const categories = useMemo(() => [...new Set(rows.map((a) => a.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr")), [rows]);
   const list = useMemo(() => {
-    const q = normalize(query.trim());
+    // Chaque mot saisi doit se retrouver dans le nom, la catégorie, les dimensions, le coloris ou la référence.
+    const words = normalize(query.trim()).split(/\s+/).filter(Boolean);
     return rows
-      .filter((a) => !q || normalize(`${a.name} ${a.reference}`).includes(q))
-      .sort((a, b) => Number(b.waiting > 0) - Number(a.waiting > 0) || a.name.localeCompare(b.name, "fr"));
-  }, [rows, query]);
+      .filter((a) => !category || a.category === category)
+      .filter((a) => (only === "stock" ? a.stock > 0 : only === "rupture" ? a.stock === 0 : only === "prix" ? a.price === 0 : true))
+      .filter((a) => {
+        const text = normalize(`${a.name} ${a.category} ${a.dimensions} ${a.color} ${a.reference}`);
+        return words.every((w) => text.includes(w));
+      })
+      .sort((a, b) => Number(b.waiting > 0) - Number(a.waiting > 0) || a.category.localeCompare(b.category, "fr") || a.name.localeCompare(b.name, "fr") || a.dimensions.localeCompare(b.dimensions, "fr", { numeric: true }));
+  }, [rows, query, category, only]);
 
   return (
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-3 md:px-4">
         <div className="relative min-w-[200px] flex-1">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher un article…" aria-label="Rechercher un article" className={`${inputClass} pl-9`} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher : nom, catégorie, coloris, référence…" aria-label="Rechercher un produit" className={`${inputClass} pl-9`} />
         </div>
         <button type="button" onClick={() => setCreating((v) => !v)} className={buttonPrimary}>
-          {creating ? <X size={16} /> : <Plus size={16} />} {creating ? "Fermer" : "Nouvel article"}
+          {creating ? <X size={16} /> : <Plus size={16} />} {creating ? "Fermer" : "Ajouter un produit"}
         </button>
+        <div className="flex w-full flex-wrap items-center gap-2">
+          {categories.length > 0 ? (
+            <div className="w-full sm:w-64">
+            <select className={inputClass} aria-label="Filtrer par catégorie" value={category} onChange={(e) => setCategory(e.target.value)}>
+              <option value="">Toutes les catégories</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c} ({rows.filter((a) => a.category === c).length})
+                </option>
+              ))}
+            </select>
+            </div>
+          ) : null}
+          {(
+            [
+              ["", "Tout"],
+              ["stock", "En stock"],
+              ["rupture", "Rupture"],
+              ["prix", "Prix à définir"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={only === key}
+              onClick={() => setOnly(key)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${only === key ? "border-black bg-black text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"}`}
+            >
+              {label}
+            </button>
+          ))}
+          <span className="tabular ml-auto text-xs text-slate-500">
+            {list.length} produit{list.length > 1 ? "s" : ""}
+          </span>
+        </div>
       </div>
-      {creating ? <ArticleForm onClose={() => setCreating(false)} /> : null}
+      {creating ? <ArticleForm categories={categories} onClose={() => setCreating(false)} /> : null}
 
       {list.length === 0 ? (
         <p className="px-4 py-14 text-center text-sm text-slate-500">
-          {rows.length === 0 ? "Aucun article. Créez-en un ici ou directement depuis un bon de commande." : "Aucun article ne correspond."}
+          {rows.length === 0 ? "Inventaire vide. Ajoutez un produit ici ou directement depuis un bon de commande." : "Aucun produit ne correspond."}
         </p>
       ) : (
         <ul className="divide-y divide-slate-100">
           {list.map((article) =>
             editing === article.id ? (
               <li key={article.id}>
-                <ArticleForm article={article} onClose={() => setEditing(null)} />
+                <ArticleForm article={article} categories={categories} onClose={() => setEditing(null)} />
               </li>
             ) : (
               <li key={article.id} className="flex flex-col gap-3 px-4 py-3.5 md:flex-row md:items-center">
@@ -151,10 +216,16 @@ export default function StockTable({ rows }: { rows: StockRow[] }) {
                       <Pencil size={14} />
                     </button>
                   </div>
-                  <div className="tabular text-xs text-slate-500">
-                    {article.reference ? `${article.reference} · ` : ""}
-                    {eur(article.price)}
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
+                    {article.category ? <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">{article.category}</span> : null}
+                    {articleDetails(article) ? <span>{articleDetails(article)}</span> : null}
+                    {article.price > 0 ? (
+                      <span className="tabular font-semibold text-slate-900">{eur(article.price)}</span>
+                    ) : (
+                      <span className="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-800">Prix à définir</span>
+                    )}
                   </div>
+                  {article.reference ? <div className="tabular mt-0.5 truncate text-[11px] text-slate-400">{article.reference}</div> : null}
                   {article.waiting > 0 ? (
                     <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
                       <Hourglass size={12} /> {article.waiting} attendu{article.waiting > 1 ? "s" : ""} par des clients · à réapprovisionner

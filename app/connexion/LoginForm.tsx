@@ -16,10 +16,13 @@ export default function LoginForm({ target }: { target: string }) {
         id="code"
         name="code"
         type="password"
+        // Clavier à chiffres sur téléphone.
+        inputMode="numeric"
+        pattern="[0-9]*"
         autoComplete="current-password"
         autoFocus
         required
-        className="w-full rounded-xl border border-white/15 bg-neutral-950 px-4 py-3 text-base text-white outline-none placeholder:text-neutral-600 focus:border-white"
+        className="w-full rounded-xl border border-white/15 bg-neutral-950 px-4 py-3 text-center text-2xl tracking-[0.4em] text-white outline-none placeholder:text-neutral-600 focus:border-white"
       />
       {state.error ? (
         <p role="alert" className="text-sm text-rose-400">

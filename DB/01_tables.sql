@@ -17,6 +17,11 @@ create table if not exists public.deco_articles (
   created_at  timestamptz    not null default now()
 );
 
+-- Fiche produit de l'inventaire (ajoutée après la première version).
+alter table public.deco_articles add column if not exists category   text not null default '';
+alter table public.deco_articles add column if not exists dimensions text not null default '';
+alter table public.deco_articles add column if not exists color      text not null default '';
+
 -- Commandes / bons de commande.
 create table if not exists public.deco_orders (
   id              text primary key,

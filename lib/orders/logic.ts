@@ -178,3 +178,11 @@ export function signatureMatches(order: Order): boolean {
 export function signedCopy(order: Order): Order {
   return order.signature ? { ...order, ...structuredClone(order.signature.snapshot) } : order;
 }
+
+/* ───────────────────────── Articles ───────────────────────── */
+
+/** « 300 × 200 cm · Noyer » : ce qui distingue deux articles du même nom. */
+export const articleDetails = (article: { dimensions?: string; color?: string }) => [article.dimensions, article.color].filter(Boolean).join(" · ");
+
+/** Désignation complète, telle qu'elle s'imprime sur le bon de commande. */
+export const articleLabel = (article: { name: string; dimensions?: string; color?: string }) => [article.name, articleDetails(article)].filter(Boolean).join(" · ");

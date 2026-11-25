@@ -14,16 +14,16 @@ export function demoDb(): Db {
 
   const scenario: { input: OrderInput; geo?: { lat: number; lon: number }; prepared?: boolean }[] = [
     {
-      input: { ...base, customer: customer("Benali Nadia", "06 00 00 00 01", "15 Avenue de la Gare", "31120", "Portet-sur-Garonne", "Maison, portail vert, sonner"), observations: "Délai 2 mois", paid: 500, lines: [{ newArticle: { name: "Table Marbella beige", reference: "MAR-BG", price: 1600, stock: 3 }, quantity: 1 }, { newArticle: { name: "Chaise Hailey noyer", reference: "HAI-NO", price: 100, stock: 20 }, quantity: 6 }], delivery: { mode: "montage", adjustment: 0, offered: true }, scheduledDate: today, time: "09:30" },
+      input: { ...base, customer: customer("Benali Nadia", "06 00 00 00 01", "15 Avenue de la Gare", "31120", "Portet-sur-Garonne", "Maison, portail vert, sonner"), observations: "Délai 2 mois", paid: 500, lines: [{ newArticle: { name: "Table Marbella beige", reference: "MAR-BG", category: "Tables à manger", price: 1600, stock: 3 }, quantity: 1 }, { newArticle: { name: "Chaise Hailey noyer", reference: "HAI-NO", category: "Chaises", price: 100, stock: 20 }, quantity: 6 }], delivery: { mode: "montage", adjustment: 0, offered: true }, scheduledDate: today, time: "09:30" },
       geo: { lat: 43.5227, lon: 1.4011 },
       prepared: true,
     },
     {
-      input: { ...base, customer: customer("Haddad Karim", "06 00 00 00 02", "10 Rue de Metz", "31000", "Toulouse", "3e étage, ascenseur"), paid: 1410, lines: [{ newArticle: { name: "Canapé d'angle Oslo gris", reference: "OSL-GR", price: 1290, stock: 3 }, quantity: 1 }], delivery: { mode: "etage", adjustment: 20, offered: false }, scheduledDate: today, time: "11:00" },
+      input: { ...base, customer: customer("Haddad Karim", "06 00 00 00 02", "10 Rue de Metz", "31000", "Toulouse", "3e étage, ascenseur"), paid: 1410, lines: [{ newArticle: { name: "Canapé d'angle Oslo gris", reference: "OSL-GR", category: "Canapés d’angle", price: 1290, stock: 3 }, quantity: 1 }], delivery: { mode: "etage", adjustment: 20, offered: false }, scheduledDate: today, time: "11:00" },
       geo: { lat: 43.6004, lon: 1.4445 },
     },
     {
-      input: { ...base, customer: customer("Laurent Sophie", "06 00 00 00 03", "5 Avenue du Général de Gaulle", "31700", "Blagnac"), discount: { type: "percent", value: 10 }, lines: [{ newArticle: { name: "Buffet Lina chêne", reference: "LIN-CH", price: 800, stock: 4 }, quantity: 1 }], delivery: { mode: "porte", adjustment: 0, offered: false }, scheduledDate: today, time: "14:30" },
+      input: { ...base, customer: customer("Laurent Sophie", "06 00 00 00 03", "5 Avenue du Général de Gaulle", "31700", "Blagnac"), discount: { type: "percent", value: 10 }, lines: [{ newArticle: { name: "Buffet Lina chêne", reference: "LIN-CH", category: "Buffets", price: 800, stock: 4 }, quantity: 1 }], delivery: { mode: "porte", adjustment: 0, offered: false }, scheduledDate: today, time: "14:30" },
       geo: { lat: 43.6362, lon: 1.3906 },
     },
     {
@@ -35,7 +35,7 @@ export function demoDb(): Db {
       geo: { lat: 43.6112, lon: 1.3348 },
     },
     {
-      input: { ...base, customer: customer("Cherif Yanis", "06 00 00 00 06", "3 Rue Clément Ader", "31600", "Muret"), observations: "Arrivage prévu début décembre", paid: 200, lines: [{ newArticle: { name: "Lit coffre Nova 160", reference: "NOV-160", price: 690, stock: 0 }, quantity: 1 }], delivery: { mode: "etage", adjustment: 0, offered: false } },
+      input: { ...base, customer: customer("Cherif Yanis", "06 00 00 00 06", "3 Rue Clément Ader", "31600", "Muret"), observations: "Arrivage prévu début décembre", paid: 200, lines: [{ newArticle: { name: "Lit coffre Nova 160", reference: "NOV-160", category: "Lits", price: 690, stock: 0 }, quantity: 1 }], delivery: { mode: "etage", adjustment: 0, offered: false } },
       geo: { lat: 43.4607, lon: 1.3268 },
     },
     {

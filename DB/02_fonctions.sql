@@ -47,15 +47,20 @@ begin
     return false;
   end if;
 
-  insert into public.deco_articles (id, name, reference, price, stock, created_at)
-  select x.id, x.name, coalesce(x.reference, ''), x.price, x.stock, coalesce(x.created_at, now())
+  insert into public.deco_articles (id, name, reference, category, dimensions, color, price, stock, created_at)
+  select x.id, x.name, coalesce(x.reference, ''), coalesce(x.category, ''), coalesce(x.dimensions, ''), coalesce(x.color, ''),
+         x.price, x.stock, coalesce(x.created_at, now())
     from jsonb_to_recordset(coalesce(p_articles, '[]'::jsonb))
-         as x(id text, name text, reference text, price numeric, stock integer, created_at timestamptz)
+         as x(id text, name text, reference text, category text, dimensions text, color text,
+              price numeric, stock integer, created_at timestamptz)
   on conflict (id) do update
-     set name      = excluded.name,
-         reference = excluded.reference,
-         price     = excluded.price,
-         stock     = excluded.stock;
+     set name       = excluded.name,
+         reference  = excluded.reference,
+         category   = excluded.category,
+         dimensions = excluded.dimensions,
+         color      = excluded.color,
+         price      = excluded.price,
+         stock      = excluded.stock;
 
   insert into public.deco_orders (
     id, number, created_at, customer, lines, discount, delivery, scheduled_date, slot,

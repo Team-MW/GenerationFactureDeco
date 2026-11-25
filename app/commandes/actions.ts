@@ -4,10 +4,10 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { geocode } from "@/lib/orders/geocode";
 import { DELIVERY_MODES, PAYMENT_METHODS, cleanTime, fullAddress, hourLabel, isPickup, isStockComplete, orderTotals, parisToday, slotOfTime } from "@/lib/orders/logic";
-import { UserError, clean, euros, id, insertOrder, isDate, frDate, log, makeArticle, now, parsePrice, round2, signToken } from "@/lib/orders/build";
+import { UserError, articleFields, clean, euros, id, insertOrder, isDate, frDate, log, makeArticle, now, parsePrice, round2, signToken } from "@/lib/orders/build";
 import { signUrl } from "@/lib/orders/signature";
 import { StoreError, currentScope, loadDb, mutate } from "@/lib/orders/store";
-import type { Article, Db, Order, OrderInput, PaymentMethod, Result, Slot } from "@/lib/orders/types";
+import type { ArticleInput, Db, Order, OrderInput, PaymentMethod, Result, Slot } from "@/lib/orders/types";
 import { DEFAULT_SETTINGS, getSettings } from "@/lib/settings";
 import { MAIL_CONFIGURED, MailError, isEmail, sendMail } from "@/lib/mail";
 import { EMAIL_KINDS, buildEmail, isEmailKind, type EmailKind } from "@/lib/orders/emails";
@@ -65,7 +65,7 @@ function allocate(db: Db) {
 
 /* ───────────────────────── Articles & stock ───────────────────────── */
 
-export async function createArticle(input: { name: string; reference: string; price: number; stock: number }) {
+export async function createArticle(input: ArticleInput & { stock: number }) {
   return run(() =>
     mutate((db) => {
       const article = makeArticle(db, input);
@@ -75,16 +75,13 @@ export async function createArticle(input: { name: string; reference: string; pr
   );
 }
 
-export async function updateArticle(articleId: string, input: { name: string; reference: string; price: number }) {
+export async function updateArticle(articleId: string, input: ArticleInput) {
   return run(() =>
     mutate((db) => {
       const article = db.articles.find((a) => a.id === articleId);
       if (!article) throw new UserError("Article introuvable.");
-      const name = clean(input.name, 120);
-      if (!name) throw new UserError("Le nom de l'article est obligatoire.");
-      article.name = name;
-      article.reference = clean(input.reference, 40);
-      article.price = parsePrice(input.price, "Prix");
+      // Les bons déjà émis gardent la désignation et le prix du jour de la commande.
+      Object.assign(article, articleFields(db, input, articleId));
       return undefined;
     }),
   );

@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { createOrder } from "@/app/commandes/actions";
 import { toast } from "@/lib/client";
 import { eur } from "@/lib/format";
-import { DELIVERY_MODES, addDays, dayLabel, hourLabel, orderTotals, sortKey, timeLabel } from "@/lib/orders/logic";
+import { DELIVERY_MODES, addDays, articleDetails, articleLabel, dayLabel, hourLabel, orderTotals, sortKey, timeLabel } from "@/lib/orders/logic";
 import type { Article, DeliveryMode, OrderInput, Slot } from "@/lib/orders/types";
 
 /** Livraison ou retrait déjà au planning (pour voir la charge d'une journée avant de choisir). */
@@ -30,6 +30,8 @@ interface FormLine {
   price: string;
   stock: string;
   quantity: number;
+  /** Article de l'inventaire sans prix : le vendeur le saisit ici, il est enregistré sur la fiche. */
+  needsPrice?: boolean;
 }
 
 const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -65,17 +67,18 @@ export default function OrderForm({ articles, agenda, today, mailReady, testMode
 
   const byId = useMemo(() => new Map(articles.map((a) => [a.id, a])), [articles]);
   const matches = useMemo(() => {
-    const q = normalize(query.trim());
+    // Chaque mot saisi doit se retrouver dans le nom, la catégorie, les dimensions, le coloris ou la référence.
+    const words = normalize(query.trim()).split(/\s+/).filter(Boolean);
     const used = new Set(lines.map((l) => l.articleId));
     return articles
-      .filter((a) => !used.has(a.id) && (!q || normalize(`${a.name} ${a.reference}`).includes(q)))
-      .slice(0, 6);
+      .filter((a) => !used.has(a.id) && words.every((w) => normalize(`${a.name} ${a.category} ${a.dimensions} ${a.color} ${a.reference}`).includes(w)))
+      .slice(0, 8);
   }, [articles, lines, query]);
 
   const addExisting = (article: Article) => {
     setLines((list) => [
       ...list,
-      { key: nextKey, articleId: article.id, name: article.name, reference: article.reference, price: String(article.price), stock: "", quantity: 1 },
+      { key: nextKey, articleId: article.id, name: articleLabel(article), reference: article.reference, price: article.price > 0 ? String(article.price) : "", stock: "", quantity: 1, needsPrice: article.price === 0 },
     ]);
     setNextKey((k) => k + 1);
     setQuery("");
@@ -106,6 +109,8 @@ export default function OrderForm({ articles, agenda, today, mailReady, testMode
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (lines.length === 0) return toast("Ajoutez au moins un article.", "error");
+    const unpriced = lines.find((l) => num(l.price) <= 0);
+    if (unpriced) return toast(`Indiquez le prix de « ${unpriced.name || "l'article"} ».`, "error");
     const input: OrderInput = {
       shop: "toulouse",
       observations,
@@ -113,7 +118,7 @@ export default function OrderForm({ articles, agenda, today, mailReady, testMode
       customer,
       lines: lines.map((l) =>
         l.articleId
-          ? { articleId: l.articleId, quantity: l.quantity }
+          ? { articleId: l.articleId, quantity: l.quantity, ...(l.needsPrice ? { price: num(l.price) } : {}) }
           : { newArticle: { name: l.name, reference: l.reference, price: num(l.price), stock: Math.floor(num(l.stock)) }, quantity: l.quantity },
       ),
       discount: { type: discountType, value: num(discountValue) },
@@ -175,7 +180,7 @@ export default function OrderForm({ articles, agenda, today, mailReady, testMode
         </Card>
 
         <Card>
-          <CardHeader title="Articles" hint="Sélectionnez un article du stock ou créez-en un nouveau" />
+          <CardHeader title="Articles" hint="Sélectionnez un produit de l'inventaire ou créez-en un nouveau" />
           <div className="p-4 md:p-5">
             <div className="relative">
               <Search size={16} className="pointer-events-none absolute left-3 top-3 text-slate-400" />
@@ -194,12 +199,13 @@ export default function OrderForm({ articles, agenda, today, mailReady, testMode
                       <button type="button" onClick={() => addExisting(article)} className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-slate-50">
                         <span className="min-w-0">
                           <span className="block truncate font-medium text-slate-900">{article.name}</span>
-                          <span className="tabular text-xs text-slate-500">
-                            {article.reference ? `${article.reference} · ` : ""}
+                          <span className="tabular block truncate text-xs text-slate-500">
+                            {[article.category, articleDetails(article)].filter(Boolean).join(" · ") || article.reference}
+                            {" · "}
                             {article.stock > 0 ? `${article.stock} en stock` : "Rupture de stock"}
                           </span>
                         </span>
-                        <span className="tabular shrink-0 font-semibold text-slate-900">{eur(article.price)}</span>
+                        <span className="tabular shrink-0 font-semibold text-slate-900">{article.price > 0 ? eur(article.price) : <span className="text-xs font-medium text-amber-700">Prix à saisir</span>}</span>
                       </button>
                     </li>
                   ))}
@@ -226,10 +232,16 @@ export default function OrderForm({ articles, agenda, today, mailReady, testMode
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="truncate text-sm font-medium text-slate-900">{line.name}</div>
-                            <div className="tabular text-xs text-slate-500">
-                              {line.reference ? `${line.reference} · ` : ""}
-                              {eur(num(line.price))} l&apos;unité
+                            <div className="tabular truncate text-xs text-slate-500">
+                              {line.reference ? `${line.reference}` : ""}
+                              {line.needsPrice ? "" : `${line.reference ? " · " : ""}${eur(num(line.price))} l'unité`}
                             </div>
+                            {line.needsPrice ? (
+                              <label className="mt-2 flex items-center gap-2 text-xs font-medium text-amber-800">
+                                Prix TTC (€) à définir
+                                <input className={`${inputClass} w-28`} inputMode="decimal" aria-label={`Prix de ${line.name}`} value={line.price} onChange={(e) => update(line.key, { price: e.target.value })} required />
+                              </label>
+                            ) : null}
                           </div>
                           <div className="tabular shrink-0 text-sm font-semibold text-slate-900">{eur(num(line.price) * line.quantity)}</div>
                         </div>
