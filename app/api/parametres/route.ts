@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { generateMissing } from "@/lib/generate";
 import { geocode } from "@/lib/orders/geocode";
 import { CAN_WRITE, DEFAULT_SETTINGS, getSettings, readOnlyResponse, saveSettings } from "@/lib/settings";
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
       }
     }
     const settings = await saveSettings(input);
-    void generateMissing().catch((error) => console.error("[factures]", error));
+    after(() => generateMissing().catch((error) => console.error("[factures]", error)));
     return Response.json(settings);
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Enregistrement impossible." }, { status: 500 });

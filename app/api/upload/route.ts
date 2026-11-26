@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import path from "node:path";
 import { ACCEPTED_EXTENSIONS, importUpload } from "@/lib/data";
 import { generateMissing } from "@/lib/generate";
@@ -41,6 +42,6 @@ export async function POST(request: Request) {
   }
 
   // Copies PDF sur le disque (usage local) : en arrière-plan, la réponse n'attend pas.
-  void generateMissing().catch((error) => console.error("[factures]", error));
+  after(() => generateMissing().catch((error) => console.error("[factures]", error)));
   return Response.json({ saved, skipped, newInvoices });
 }

@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { generateMissing } from "@/lib/generate";
 import { CAN_WRITE, getLogo, readOnlyResponse, removeLogo, saveLogo } from "@/lib/settings";
 
@@ -27,13 +28,13 @@ export async function POST(request: Request) {
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Enregistrement impossible." }, { status: 500 });
   }
-  void generateMissing().catch((error) => console.error("[factures]", error));
+  after(() => generateMissing().catch((error) => console.error("[factures]", error)));
   return Response.json({ ok: true });
 }
 
 export async function DELETE() {
   if (!CAN_WRITE) return readOnlyResponse();
   await removeLogo();
-  void generateMissing().catch((error) => console.error("[factures]", error));
+  after(() => generateMissing().catch((error) => console.error("[factures]", error)));
   return Response.json({ ok: true });
 }

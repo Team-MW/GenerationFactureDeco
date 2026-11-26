@@ -8,6 +8,21 @@
  *
  * Les écritures ne passent jamais par ce cache : elles relisent toujours la base.
  */
+import { after } from "next/server";
+
+/**
+ * Sur l'hébergement (Vercel), le serveur est mis en pause dès que la page est envoyée : un rechargement lancé
+ * « derrière » restait figé, puis échouait en délai dépassé à la visite suivante. `after` garde le serveur
+ * éveillé jusqu'à la fin du rechargement.
+ */
+function keepAlive(work: Promise<unknown>) {
+  const settled = work.catch(() => undefined);
+  try {
+    after(() => settled);
+  } catch {
+    // Appelé hors d'une requête (script, test) : rien à maintenir.
+  }
+}
 export interface Cache<T> {
   read(): Promise<T>;
   /** Remplace la valeur (après une écriture réussie). */
@@ -67,7 +82,7 @@ export function createCache<T>(name: string, load: () => Promise<T>, fresh: numb
       const age = Date.now() - s.at;
       if (s.value !== undefined && age < fresh) return s.value;
       if (s.value !== undefined && age < stale) {
-        void refresh().catch(() => undefined);
+        keepAlive(refresh());
         return s.value;
       }
       return refresh();
