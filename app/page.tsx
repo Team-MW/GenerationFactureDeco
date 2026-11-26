@@ -49,7 +49,8 @@ export default async function HomePage() {
       <header className="mx-auto w-full max-w-4xl">
         <div className="flex items-center justify-between gap-4">
           <div className="text-lg font-semibold tracking-tight">{companyName}</div>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center justify-end gap-1">
+            <TestModeSwitch active={testMode} />
             <Link href="/parametres" className="rounded-lg px-3 py-1.5 text-sm font-medium text-neutral-400 transition hover:bg-white/10 hover:text-white">
               Paramètres
             </Link>
@@ -93,7 +94,6 @@ export default async function HomePage() {
             </Link>
           ))}
         </div>
-        <TestModeSwitch active={testMode} />
       </div>
     </main>
   );
