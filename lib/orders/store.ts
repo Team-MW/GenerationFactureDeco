@@ -53,14 +53,36 @@ interface OrderRow {
   extra: { shop?: ShopId; observations?: string; paid?: number; time?: string; payments?: Payment[]; extras?: Extra[]; geoFailed?: boolean; emails?: Order["emails"]; signToken?: string; signature?: Signature | null } | null;
 }
 
-const articleFromRow = (r: ArticleRow): Article => ({
+/**
+ * Fiche d'un article au-delà de son nom, son prix et son stock : catégorie, dimensions, coloris, fournisseur,
+ * prix d'achat et transport. Ces fiches sont enregistrées ensemble dans la table des paramètres
+ * (clé « gestion_fiches », identifiant d'article → fiche) : aucune colonne à ajouter à la base quand un champ
+ * s'ajoute. Si les colonnes catégorie / dimensions / coloris existent (script DB/06_inventaire.sql), elles
+ * servent de valeur de départ pour les articles qui n'ont pas encore de fiche.
+ */
+type Sheet = Pick<Article, "category" | "dimensions" | "color" | "supplier" | "cost" | "transport" | "truckCost" | "truckUnits" | "truckId" | "truckQty" | "customsRate" | "customsFixed" | "fees" | "extras">;
+type Sheets = Record<string, Partial<Sheet>>;
+const SHEETS_KEY = "gestion_fiches";
+const sheetOf = (a: Article): Sheet => ({ category: a.category, dimensions: a.dimensions, color: a.color, supplier: a.supplier, cost: a.cost, transport: a.transport, truckCost: a.truckCost, truckUnits: a.truckUnits, truckId: a.truckId, truckQty: a.truckQty, customsRate: a.customsRate, customsFixed: a.customsFixed, fees: a.fees, extras: a.extras });
+
+const articleFromRow = (r: ArticleRow, sheet: Partial<Sheet> | undefined): Article => ({
   id: r.id,
   name: r.name,
   reference: r.reference,
-  // Colonnes ajoutées par DB/06_inventaire.sql : absentes tant que ce script n'a pas été lancé.
-  category: r.category ?? "",
-  dimensions: r.dimensions ?? "",
-  color: r.color ?? "",
+  category: sheet?.category ?? r.category ?? "",
+  dimensions: sheet?.dimensions ?? r.dimensions ?? "",
+  color: sheet?.color ?? r.color ?? "",
+  supplier: sheet?.supplier ?? "",
+  cost: Number(sheet?.cost ?? 0) || 0,
+  transport: Number(sheet?.transport ?? 0) || 0,
+  truckCost: Number(sheet?.truckCost ?? 0) || 0,
+  truckUnits: Number(sheet?.truckUnits ?? 0) || 0,
+  truckId: typeof sheet?.truckId === "string" ? sheet.truckId : "",
+  truckQty: Number(sheet?.truckQty ?? 0) || 0,
+  customsRate: Number(sheet?.customsRate ?? 0) || 0,
+  customsFixed: Number(sheet?.customsFixed ?? 0) || 0,
+  fees: Number(sheet?.fees ?? 0) || 0,
+  extras: sheet?.extras && typeof sheet.extras === "object" ? { ...sheet.extras } : {},
   price: Number(r.price),
   stock: Number(r.stock),
   createdAt: r.created_at,
@@ -136,11 +158,16 @@ const orderToRow = (o: Order): OrderRow => ({
 });
 
 async function loadRemote(): Promise<{ db: Db; version: number }> {
-  const raw = (await rpc<{ version?: number; counters?: Db["counters"]; depot?: Db["depot"]; articles?: ArticleRow[]; orders?: OrderRow[] } | null>("gestion_load")) ?? {};
+  const [loaded, storedSheets] = await Promise.all([
+    rpc<{ version?: number; counters?: Db["counters"]; depot?: Db["depot"]; articles?: ArticleRow[]; orders?: OrderRow[] } | null>("gestion_load"),
+    readValue<Sheets>(SHEETS_KEY),
+  ]);
+  const raw = loaded ?? {};
+  const sheets = storedSheets ?? {};
   return {
     version: Number(raw.version ?? 0),
     db: {
-      articles: (raw.articles ?? []).map(articleFromRow),
+      articles: (raw.articles ?? []).map((row) => articleFromRow(row, sheets[row.id])),
       orders: (raw.orders ?? []).map(orderFromRow),
       counters: raw.counters ?? {},
       depot: raw.depot ?? null,
@@ -156,13 +183,26 @@ async function mutateRemote<T>(change: (db: Db) => T | Promise<T>): Promise<T> {
   for (let attempt = 0; attempt < 6; attempt++) {
     const { db, version } = await loadRemote();
     const before = new Map<string, string>();
-    for (const a of db.articles) before.set(`a:${a.id}`, JSON.stringify(a));
+    const sheetsBefore = new Map<string, string>();
+    for (const a of db.articles) {
+      before.set(`a:${a.id}`, JSON.stringify(a));
+      sheetsBefore.set(a.id, JSON.stringify(sheetOf(a)));
+    }
     for (const o of db.orders) before.set(`o:${o.id}`, JSON.stringify(o));
 
     const result = await change(db);
 
-    const articles = db.articles.filter((a) => before.get(`a:${a.id}`) !== JSON.stringify(a)).map(articleToRow);
+    const changedArticles = db.articles.filter((a) => before.get(`a:${a.id}`) !== JSON.stringify(a));
+    const articles = changedArticles.map(articleToRow);
     const orders = db.orders.filter((o) => before.get(`o:${o.id}`) !== JSON.stringify(o)).map(orderToRow);
+    // Les fiches modifiées sont écrites d'abord : si l'enregistrement qui suit échoue, il sera rejoué ;
+    // dans l'ordre inverse, un produit pourrait être créé sans sa fiche.
+    const changedSheets = changedArticles.filter((a) => sheetsBefore.get(a.id) !== JSON.stringify(sheetOf(a)));
+    if (changedSheets.length > 0) {
+      const sheets = (await readValue<Sheets>(SHEETS_KEY)) ?? {};
+      for (const article of changedSheets) sheets[article.id] = sheetOf(article);
+      await writeValue(SHEETS_KEY, sheets);
+    }
     const saved = await rpc<boolean>("gestion_save", {
       p_version: version,
       p_articles: articles,
@@ -290,6 +330,17 @@ function withArticleDefaults(article: Article): Article {
   article.category ??= "";
   article.dimensions ??= "";
   article.color ??= "";
+  article.supplier ??= "";
+  article.cost ??= 0;
+  article.transport ??= 0;
+  article.truckCost ??= 0;
+  article.truckUnits ??= 0;
+  article.truckId ??= "";
+  article.truckQty ??= 0;
+  article.customsRate ??= 0;
+  article.customsFixed ??= 0;
+  article.fees ??= 0;
+  article.extras ??= {};
   return article;
 }
 

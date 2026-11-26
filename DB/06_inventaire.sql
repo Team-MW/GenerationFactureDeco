@@ -1,5 +1,11 @@
 -- ============================================================================
 -- 06 · INVENTAIRE
+--
+-- FACULTATIF : ce script n'est plus nécessaire. L'application enregistre désormais les fiches produit
+-- (catégorie, dimensions, coloris, fournisseur, prix d'achat, transport) dans la table des paramètres,
+-- sans colonne à ajouter, et les produits s'importent par le bouton « Importer » de la page Stock.
+-- Le lancer reste sans danger : il n'efface rien et ne crée aucun doublon.
+--
 -- À exécuter une fois dans Supabase : SQL Editor > New query > coller tout > Run.
 -- Peut être relancé sans risque : rien n'est effacé, aucun produit n'est créé en double.
 --

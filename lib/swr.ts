@@ -4,7 +4,7 @@
  * - valeur récente (moins de `fresh` ms) : renvoyée sans appel réseau ;
  * - valeur un peu ancienne (moins de `stale` ms) : renvoyée tout de suite, et rechargée en
  *   arrière-plan pour la lecture suivante ;
- * - sinon : on attend le chargement.
+ * - sinon : on attend le chargement ; s'il échoue et qu'une ancienne valeur existe, c'est elle qui est renvoyée.
  *
  * Les écritures ne passent jamais par ce cache : elles relisent toujours la base.
  */
@@ -45,6 +45,15 @@ export function createCache<T>(name: string, load: () => Promise<T>, fresh: numb
         s.value = value;
         s.at = Date.now();
         return value;
+      })
+      .catch((error) => {
+        // Base injoignable : mieux vaut afficher les dernières données connues qu'une page d'erreur.
+        // Les écritures, elles, ne passent jamais par ce cache et échouent franchement.
+        if (s.value !== undefined) {
+          console.error(`[cache] ${name} : rechargement impossible, dernières données connues servies`);
+          return s.value;
+        }
+        throw error;
       })
       .finally(() => {
         if (s.loading === loading) s.loading = undefined;

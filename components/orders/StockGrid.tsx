@@ -2,10 +2,11 @@
 
 import { ArrowDown, ArrowUp, ChevronsUpDown, Download, Loader2, Pencil, Plus, Search, Upload, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { importArticles, setArticlePrice, setStock } from "@/app/commandes/actions";
+import { importArticles, setArticleCost, setArticlePrice, setStock } from "@/app/commandes/actions";
 import { toast } from "@/lib/client";
 import { eur } from "@/lib/format";
 import { parseProducts, productsToCsv, type ProductLine } from "@/lib/orders/csv";
+import { landedCost, margin as productMargin, transportPerUnit, type CostItem } from "@/lib/orders/pricing";
 import type { StockRow } from "@/lib/orders/stock";
 import type { Result } from "@/lib/orders/types";
 import { Card, buttonPrimary, buttonSecondary } from "../ui";
@@ -16,13 +17,17 @@ import { inputClass } from "./bits";
 const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 const num = (s: string) => Number(String(s).replace(/\s/g, "").replace(",", "."));
 
-type SortKey = "name" | "category" | "price" | "stock" | "reserved" | "waiting";
-type Only = "" | "stock" | "rupture" | "attente" | "prix";
+type SortKey = "name" | "category" | "supplier" | "cost" | "transport" | "price" | "margin" | "stock" | "reserved" | "waiting";
+type Only = "" | "stock" | "rupture" | "attente" | "prix" | "achat";
 
 const COLUMNS: { key: SortKey; label: string; numeric?: boolean }[] = [
   { key: "name", label: "Produit" },
   { key: "category", label: "Catégorie" },
-  { key: "price", label: "Prix TTC", numeric: true },
+  { key: "supplier", label: "Fournisseur" },
+  { key: "cost", label: "Achat", numeric: true },
+  { key: "transport", label: "Transport", numeric: true },
+  { key: "price", label: "Vente TTC", numeric: true },
+  { key: "margin", label: "Bénéfice", numeric: true },
   { key: "stock", label: "Disponible", numeric: true },
   { key: "reserved", label: "Réservé", numeric: true },
   { key: "waiting", label: "En attente", numeric: true },
@@ -42,7 +47,7 @@ function Tile({ label, value, hint }: { label: string; value: string; hint?: str
  * Valeur modifiable sur place : un clic ouvre le champ, Entrée (ou un clic ailleurs) enregistre, Échap annule.
  * Sert au comptage du stock et à la saisie rapide des prix.
  */
-function QuickEdit({ value, label, display, save, done, decimal = false }: { value: number; label: string; display: React.ReactNode; save: (next: number) => Promise<Result<unknown>>; done: string; decimal?: boolean }) {
+export function QuickEdit({ value, label, display, save, done, decimal = false }: { value: number; label: string; display: React.ReactNode; save: (next: number) => Promise<Result<unknown>>; done: string; decimal?: boolean }) {
   const { pending, run } = useAction();
   const [draft, setDraft] = useState<string | null>(null);
   const commit = () => {
@@ -154,33 +159,41 @@ function ImportPanel({ rows, onClose }: { rows: StockRow[]; onClose: () => void 
 }
 
 /** Tout le stock dans un seul grand tableau : recherche, filtres, tri, comptage, prix, ajout, import et export. */
-export default function StockGrid({ rows }: { rows: StockRow[] }) {
+export default function StockGrid({ rows, costItems = [] }: { rows: StockRow[]; costItems?: CostItem[] }) {
+  const articleMargin = (article: StockRow) => productMargin(article, 20, costItems);
+  const unitCost = (article: StockRow) => landedCost(article, costItems);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [only, setOnly] = useState<Only>("");
+  const [supplier, setSupplier] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "category", desc: false });
   const [panel, setPanel] = useState<"" | "create" | "import">("");
   const [editing, setEditing] = useState<string | null>(null);
 
   const categories = useMemo(() => [...new Set(rows.map((a) => a.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr")), [rows]);
+  const suppliers = useMemo(() => [...new Set(rows.map((a) => a.supplier).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr")), [rows]);
   const list = useMemo(() => {
     // Chaque mot saisi doit se retrouver dans le nom, la catégorie, les dimensions, le coloris ou la référence.
     const words = normalize(query.trim()).split(/\s+/).filter(Boolean);
     const filtered = rows
       .filter((a) => !category || a.category === category)
-      .filter((a) => (only === "stock" ? a.stock > 0 : only === "rupture" ? a.stock === 0 : only === "attente" ? a.waiting > 0 : only === "prix" ? a.price === 0 : true))
+      .filter((a) => !supplier || a.supplier === supplier)
+      .filter((a) => (only === "stock" ? a.stock > 0 : only === "rupture" ? a.stock === 0 : only === "attente" ? a.waiting > 0 : only === "prix" ? a.price === 0 : only === "achat" ? a.cost === 0 : true))
       .filter((a) => {
-        const text = normalize(`${a.name} ${a.category} ${a.dimensions} ${a.color} ${a.reference}`);
+        const text = normalize(`${a.name} ${a.category} ${a.dimensions} ${a.color} ${a.reference} ${a.supplier}`);
         return words.every((w) => text.includes(w));
       });
     const byName = (a: StockRow, b: StockRow) => a.name.localeCompare(b.name, "fr") || a.dimensions.localeCompare(b.dimensions, "fr", { numeric: true }) || a.color.localeCompare(b.color, "fr");
     const compare = (a: StockRow, b: StockRow) => {
       if (sort.key === "name") return byName(a, b);
       if (sort.key === "category") return a.category.localeCompare(b.category, "fr") || byName(a, b);
+      if (sort.key === "supplier") return a.supplier.localeCompare(b.supplier, "fr") || byName(a, b);
+      // Bénéfice inconnu (prix manquant) : toujours en bas du classement.
+      if (sort.key === "margin") return (articleMargin(a)?.amount ?? -Infinity) - (articleMargin(b)?.amount ?? -Infinity) || byName(a, b);
       return a[sort.key] - b[sort.key] || byName(a, b);
     };
     return filtered.sort((a, b) => (sort.desc ? -compare(a, b) : compare(a, b)));
-  }, [rows, query, category, only, sort]);
+  }, [rows, query, category, supplier, only, sort]);
 
   const units = rows.reduce((t, a) => t + a.stock, 0);
   const reserved = rows.reduce((t, a) => t + a.reserved, 0);
@@ -189,12 +202,19 @@ export default function StockGrid({ rows }: { rows: StockRow[] }) {
   const noPrice = rows.filter((a) => a.price === 0).length;
   // Valeur de vente de ce qui est physiquement en magasin (disponible + réservé), hors produits sans prix.
   const value = rows.reduce((t, a) => t + a.price * (a.stock + a.reserved), 0);
+  // Calculs sur les pièces en magasin dont on connaît le prix de revient (achat + transport).
+  const costed = rows.filter((a) => unitCost(a) > 0);
+  const stockCost = costed.reduce((t, a) => t + unitCost(a) * (a.stock + a.reserved), 0);
+  const profit = costed.reduce((t, a) => t + (articleMargin(a)?.amount ?? 0) * (a.stock + a.reserved), 0);
+  const costedValue = costed.reduce((t, a) => t + (articleMargin(a)?.priceHt ?? 0) * (a.stock + a.reserved), 0);
+  const noCost = rows.length - costed.length;
   const filters: [Only, string, number][] = [
     ["", "Tout", rows.length],
     ["stock", "En stock", inStock],
     ["rupture", "Rupture", rows.length - inStock],
     ["attente", "À réapprovisionner", toRestock],
-    ["prix", "Prix à définir", noPrice],
+    ["prix", "Prix de vente à définir", noPrice],
+    ["achat", "Prix d'achat à renseigner", noCost],
   ];
   const toggleSort = (key: SortKey) => setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: key !== "name" && key !== "category" }));
   const togglePanel = (next: "create" | "import") => {
@@ -212,11 +232,16 @@ export default function StockGrid({ rows }: { rows: StockRow[] }) {
 
   return (
     <>
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Tile label="Produits" value={String(rows.length)} hint={`${categories.length} catégorie${categories.length > 1 ? "s" : ""}${noPrice ? ` · ${noPrice} sans prix` : ""}`} />
-        <Tile label="Pièces disponibles" value={String(units)} hint={`${inStock} produit${inStock > 1 ? "s" : ""} en stock`} />
-        <Tile label="Pièces réservées" value={String(reserved)} hint={toRestock ? `${toRestock} produit${toRestock > 1 ? "s" : ""} à réapprovisionner` : "mises de côté pour des commandes"} />
-        <Tile label="Valeur du stock" value={eur(value)} hint="au prix de vente, pièces en magasin" />
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <Tile label="Produits" value={String(rows.length)} hint={`${categories.length} catégorie${categories.length > 1 ? "s" : ""}${suppliers.length ? ` · ${suppliers.length} fournisseur${suppliers.length > 1 ? "s" : ""}` : ""}`} />
+        <Tile label="Pièces en magasin" value={String(units + reserved)} hint={`${units} disponible${units > 1 ? "s" : ""} · ${reserved} réservée${reserved > 1 ? "s" : ""}${toRestock ? ` · ${toRestock} à réapprovisionner` : ""}`} />
+        <Tile label="Valeur de vente" value={eur(value)} hint={noPrice ? `${noPrice} produit${noPrice > 1 ? "s" : ""} sans prix de vente` : "pièces en magasin, au prix de vente"} />
+        <Tile label="Coût du stock" value={costed.length ? eur(stockCost) : "—"} hint={costed.length ? "coût de revient HT des pièces en magasin" : "renseignez les prix d'achat"} />
+        <Tile
+          label="Bénéfice potentiel"
+          value={costed.length ? eur(profit) : "—"}
+          hint={costed.length ? `${costedValue > 0 ? `${Math.round((profit / costedValue) * 100)} % de marge` : "aucune pièce chiffrée en magasin"}${noCost ? ` · ${noCost} produit${noCost > 1 ? "s" : ""} sans prix d'achat` : ""}` : "vente HT − coût de revient"}
+        />
       </div>
 
       <Card className="overflow-hidden">
@@ -232,6 +257,18 @@ export default function StockGrid({ rows }: { rows: StockRow[] }) {
                 {categories.map((c) => (
                   <option key={c} value={c}>
                     {c} ({rows.filter((a) => a.category === c).length})
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          {suppliers.length > 0 ? (
+            <div className="w-full sm:w-52">
+              <select className={inputClass} aria-label="Filtrer par fournisseur" value={supplier} onChange={(e) => setSupplier(e.target.value)}>
+                <option value="">Tous les fournisseurs</option>
+                {suppliers.map((name) => (
+                  <option key={name} value={name}>
+                    {name} ({rows.filter((a) => a.supplier === name).length})
                   </option>
                 ))}
               </select>
@@ -263,14 +300,14 @@ export default function StockGrid({ rows }: { rows: StockRow[] }) {
             </span>
           </div>
         </div>
-        {panel === "create" ? <ArticleForm categories={categories} onClose={() => setPanel("")} /> : null}
+        {panel === "create" ? <ArticleForm categories={categories} suppliers={suppliers} onClose={() => setPanel("")} /> : null}
         {panel === "import" ? <ImportPanel rows={rows} onClose={() => setPanel("")} /> : null}
 
         {list.length === 0 ? (
           <p className="px-4 py-14 text-center text-sm text-slate-500">{rows.length === 0 ? "Aucun produit pour l'instant. Ajoutez-en un, ou importez votre fichier de produits." : "Aucun produit ne correspond."}</p>
         ) : (
-          <div className="max-h-[70vh] overflow-auto">
-            <table className="w-full min-w-[980px] border-collapse text-sm">
+          <div className="max-h-[calc(100dvh-150px)] min-h-[420px] overflow-auto">
+            <table className="w-full min-w-[1380px] border-collapse text-sm">
               <thead className="sticky top-0 z-10 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500 shadow-[0_1px_0_#e2e8f0]">
                 <tr>
                   {COLUMNS.map((column) => (
@@ -287,11 +324,12 @@ export default function StockGrid({ rows }: { rows: StockRow[] }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {list.map((article) =>
-                  editing === article.id ? (
+                {list.map((article) => {
+                  const margin = articleMargin(article);
+                  return editing === article.id ? (
                     <tr key={article.id}>
                       <td colSpan={COLUMNS.length + 1} className="p-0">
-                        <ArticleForm article={article} categories={categories} onClose={() => setEditing(null)} />
+                        <ArticleForm article={article} categories={categories} suppliers={suppliers} onClose={() => setEditing(null)} />
                       </td>
                     </tr>
                   ) : (
@@ -315,6 +353,21 @@ export default function StockGrid({ rows }: { rows: StockRow[] }) {
                         {article.reference ? <div className="tabular max-w-[340px] truncate text-[11px] text-slate-400">{article.reference}</div> : null}
                       </td>
                       <td className="px-3 py-2.5 text-slate-700">{article.category || <span className="text-slate-400">—</span>}</td>
+                      <td className="px-3 py-2.5 text-slate-700">{article.supplier || <span className="text-slate-400">—</span>}</td>
+                      {(["cost", "transport"] as const).map((field) => (
+                        <td key={field} className="tabular whitespace-nowrap px-3 py-1.5">
+                          <div className="flex">
+                            <QuickEdit
+                              decimal
+                              value={field === "transport" ? transportPerUnit(article) : article[field]}
+                              label={`${field === "cost" ? "Prix d'achat" : "Transport"} de ${article.name}`}
+                              done={field === "cost" ? "Prix d'achat enregistré" : "Transport enregistré"}
+                              save={(next) => setArticleCost(article.id, field, next)}
+                              display={(field === "transport" ? transportPerUnit(article) : article[field]) > 0 ? <span className="text-slate-900">{eur(field === "transport" ? transportPerUnit(article) : article[field])}</span> : <span className="text-slate-300">—</span>}
+                            />
+                          </div>
+                        </td>
+                      ))}
                       <td className="tabular whitespace-nowrap px-3 py-1.5">
                         <div className="flex">
                           <QuickEdit
@@ -326,6 +379,16 @@ export default function StockGrid({ rows }: { rows: StockRow[] }) {
                             display={article.price > 0 ? <span className="font-semibold text-slate-900">{eur(article.price)}</span> : <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">À définir</span>}
                           />
                         </div>
+                      </td>
+                      <td className="tabular whitespace-nowrap px-3 py-2.5 text-right">
+                        {margin ? (
+                          <>
+                            <div className={`font-semibold ${margin.amount < 0 ? "text-rose-700" : "text-emerald-700"}`}>{eur(margin.amount)}</div>
+                            <div className="text-[11px] text-slate-500">{Math.round(margin.rate * 100)} % · revient {eur(margin.cost)}</div>
+                          </>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
                       </td>
                       <td className="tabular px-3 py-1.5">
                         <div className="flex">
@@ -344,8 +407,8 @@ export default function StockGrid({ rows }: { rows: StockRow[] }) {
                         <StockEntry article={article} />
                       </td>
                     </tr>
-                  ),
-                )}
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -1,3 +1,4 @@
+import { margin } from "./pricing";
 import type { DeliveryMode, Discount, Order, PaymentMethod, ShopId, SignedOrder, Slot } from "./types";
 
 export const PAYMENT_METHODS: Record<Exclude<PaymentMethod, "">, string> = { especes: "Espèces", carte: "Carte bancaire", virement: "Virement" };
@@ -187,3 +188,8 @@ export const articleDetails = (article: { dimensions?: string; color?: string })
 
 /** Désignation complète, telle qu'elle s'imprime sur le bon de commande. */
 export const articleLabel = (article: { name: string; dimensions?: string; color?: string }) => [article.name, articleDetails(article)].filter(Boolean).join(" · ");
+
+export { landedCost as unitCost } from "./pricing";
+
+/** Marge brute d'un produit, hors taxes (prix de vente HT − coût de revient). null tant qu'un prix manque. */
+export const articleMargin = margin;

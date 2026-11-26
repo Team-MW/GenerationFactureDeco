@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/orders/bits";
 import { Card, CardHeader, PageHeader, buttonPrimary } from "@/components/ui";
 import { eur, eur0, monthLabel, monthShort } from "@/lib/format";
 import { DELIVERY_MODES, SHOPS, orderBalance, orderTotals } from "@/lib/orders/logic";
+import { getSettings } from "@/lib/settings";
 import { loadDb } from "@/lib/orders/store";
 import type { DeliveryMode, ShopId } from "@/lib/orders/types";
 
@@ -44,6 +45,7 @@ function Delta({ current, previous, versus }: { current: number; previous?: numb
 
 export default async function SalesPage() {
   const { orders } = await loadDb();
+  const vatRate = (await getSettings()).vatRate;
   // Les commandes annulées ne comptent pas dans les ventes.
   const sales = orders.filter((o) => o.status !== "cancelled");
 
@@ -67,6 +69,8 @@ export default async function SalesPage() {
   const byMode = new Map<DeliveryMode, number>();
   const byShop = new Map<ShopId, { count: number; revenue: number }>();
   let revenue = 0, paid = 0, discounts = 0, deliveryRevenue = 0, offered = 0;
+  // Bénéfice : uniquement sur les articles vendus dont le prix de revient (achat + transport) était connu.
+  let profit = 0, costedSales = 0, articleSales = 0;
 
   for (const order of sales) {
     const totals = orderTotals(order);
@@ -84,7 +88,17 @@ export default async function SalesPage() {
     month.count += 1;
     byMonth.set(key, month);
 
+    // La remise de la commande est répartie sur ses articles, au prorata de leur prix.
+    const kept = totals.subtotal > 0 ? (totals.subtotal - totals.discount) / totals.subtotal : 1;
     for (const line of order.lines) {
+      const sold = line.unitPrice * line.quantity * kept;
+      articleSales += sold / (1 + vatRate / 100);
+      if (line.unitCost && line.unitCost > 0) {
+        // Le prix de vente est TTC, le coût de revient HT : on compare hors taxes.
+        const soldHt = sold / (1 + vatRate / 100);
+        costedSales += soldHt;
+        profit += soldHt - line.unitCost * line.quantity;
+      }
       const article = byArticle.get(line.articleId) ?? { label: line.name, quantity: 0, revenue: 0 };
       article.quantity += line.quantity;
       article.revenue += line.unitPrice * line.quantity;
@@ -141,8 +155,11 @@ export default async function SalesPage() {
         </Kpi>
       </div>
 
-      <Card className="mt-3 grid grid-cols-2 divide-slate-100 md:mt-4 lg:grid-cols-4 lg:divide-x">
+      <Card className={`mt-3 grid grid-cols-2 divide-slate-100 md:mt-4 lg:divide-x ${costedSales > 0 ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
         {[
+          ...(costedSales > 0
+            ? [["Marge brute sur les articles (HT)", eur(round2(profit)), `${Math.round((profit / costedSales) * 100)} % de marge · calculé sur ${Math.round((costedSales / articleSales) * 100)} % des ventes d'articles (prix d'achat connu)`]]
+            : []),
           ["Remises accordées", eur(round2(discounts)), "sur les articles"],
           ["Livraisons facturées", eur(round2(deliveryRevenue)), "inclus dans les ventes"],
           ["Livraisons offertes", String(offered), `sur ${sales.length} commande${sales.length > 1 ? "s" : ""}`],

@@ -4,6 +4,11 @@ import {
   ArrowLeft,
   BarChart3,
   Boxes,
+  Calculator,
+  Landmark,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Tags,
   CalendarDays,
   CheckCircle2,
   ClipboardList,
@@ -29,6 +34,9 @@ const ICONS: Record<string, LucideIcon> = {
   truck: Truck,
   chart: BarChart3,
   settings: Settings,
+  calculator: Calculator,
+  tags: Tags,
+  charges: Landmark,
 };
 
 export interface NavItem {
@@ -76,14 +84,35 @@ export default function SectionShell({
   companyName,
   section,
   nav,
+  wide = false,
   children,
 }: {
   companyName: string;
   section: string;
   nav: NavItem[];
+  /** true = le contenu occupe toute la largeur de l'écran (grands tableaux). */
+  wide?: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  // Menu de gauche repliable, pour laisser toute la place au contenu. Le choix est retenu sur cet appareil.
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem("menu-replie") === "1");
+    } catch {
+      // stockage local indisponible : le menu reste ouvert
+    }
+  }, []);
+  const toggleMenu = () =>
+    setCollapsed((current) => {
+      try {
+        localStorage.setItem("menu-replie", current ? "0" : "1");
+      } catch {
+        // sans importance
+      }
+      return !current;
+    });
   // Le centre est la seule zone qui défile : on la remet en haut à chaque changement de page.
   const scroller = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -94,12 +123,19 @@ export default function SectionShell({
 
   return (
     <div className="flex h-full">
-      <aside className="hidden h-full w-64 shrink-0 flex-col overflow-y-auto bg-black px-4 py-6 md:flex">
-        <div className="px-3 pb-8">
-          <div className="truncate text-lg font-semibold tracking-tight text-white">{companyName}</div>
-          <div className="mt-0.5 text-xs font-medium uppercase tracking-[0.14em] text-neutral-500">{section}</div>
+      <aside className={`hidden h-full shrink-0 flex-col overflow-y-auto bg-black py-6 transition-[width] duration-150 md:flex ${collapsed ? "w-[68px] px-2.5" : "w-64 px-4"}`}>
+        <div className={`flex items-start gap-2 pb-8 ${collapsed ? "justify-center" : "justify-between px-3"}`}>
+          {collapsed ? null : (
+            <div className="min-w-0">
+              <div className="truncate text-lg font-semibold tracking-tight text-white">{companyName}</div>
+              <div className="mt-0.5 text-xs font-medium uppercase tracking-[0.14em] text-neutral-500">{section}</div>
+            </div>
+          )}
+          <button type="button" onClick={toggleMenu} aria-label={collapsed ? "Agrandir le menu" : "Réduire le menu"} aria-expanded={!collapsed} title={collapsed ? "Agrandir le menu" : "Réduire le menu pour agrandir le tableau"} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-neutral-400 hover:bg-white/10 hover:text-white">
+            {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          </button>
         </div>
-        <div className="px-3 pb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-neutral-600">Menu</div>
+        {collapsed ? null : <div className="px-3 pb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-neutral-600">Menu</div>}
         <nav className="flex flex-col gap-1">
           {nav.map((item) => {
             const Icon = ICONS[item.icon];
@@ -109,22 +145,26 @@ export default function SectionShell({
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+                aria-label={collapsed ? item.label : undefined}
+                title={collapsed ? item.label : undefined}
+                className={`flex items-center gap-3 rounded-xl py-2.5 text-sm font-medium transition-colors ${collapsed ? "justify-center px-0" : "px-3"} ${
                   active ? "bg-white text-black" : "text-neutral-400 hover:bg-white/10 hover:text-white"
                 }`}
               >
                 <Icon size={18} strokeWidth={active ? 2.1 : 1.8} />
-                {item.label}
+                {collapsed ? null : item.label}
               </Link>
             );
           })}
         </nav>
         <Link
           href="/"
-          className="mt-auto flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-neutral-400 transition-colors hover:bg-white/10 hover:text-white"
+          aria-label={collapsed ? "Retour à l'accueil" : undefined}
+          title={collapsed ? "Retour à l'accueil" : undefined}
+          className={`mt-auto flex items-center gap-3 rounded-xl py-2.5 text-sm font-medium text-neutral-400 transition-colors hover:bg-white/10 hover:text-white ${collapsed ? "justify-center px-0" : "px-3"}`}
         >
           <ArrowLeft size={18} strokeWidth={1.8} />
-          Retour à l&apos;accueil
+          {collapsed ? null : <>Retour à l&apos;accueil</>}
         </Link>
       </aside>
 
@@ -138,7 +178,7 @@ export default function SectionShell({
             <div className="text-[11px] leading-tight text-slate-500">{current?.label ?? section}</div>
           </div>
         </header>
-        <main className="mx-auto max-w-[1280px] px-4 pb-28 pt-5 sm:px-8 md:py-8">{children}</main>
+        <main className={`mx-auto px-4 pb-28 pt-5 md:py-8 ${wide ? "max-w-none sm:px-6" : "max-w-[1280px] sm:px-8"}`}>{children}</main>
       </div>
 
       {nav.length > 1 ? (

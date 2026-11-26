@@ -13,7 +13,7 @@ export type { StockRow } from "@/lib/orders/stock";
 
 const num = (s: string) => Number(String(s).replace(",", ".")) || 0;
 
-export function ArticleForm({ article, categories, onClose }: { article?: Article; categories: string[]; onClose: () => void }) {
+export function ArticleForm({ article, categories, suppliers = [], onClose }: { article?: Article; categories: string[]; suppliers?: string[]; onClose: () => void }) {
   const { pending, run } = useAction();
   const [name, setName] = useState(article?.name ?? "");
   const [reference, setReference] = useState(article?.reference ?? "");
@@ -21,14 +21,17 @@ export function ArticleForm({ article, categories, onClose }: { article?: Articl
   const [dimensions, setDimensions] = useState(article?.dimensions ?? "");
   const [color, setColor] = useState(article?.color ?? "");
   const [price, setPrice] = useState(article && article.price > 0 ? String(article.price) : "");
+  const [cost, setCost] = useState(article && article.cost > 0 ? String(article.cost) : "");
+  const [transport, setTransport] = useState(article && article.transport > 0 ? String(article.transport) : "");
+  const [supplier, setSupplier] = useState(article?.supplier ?? "");
   const [stock, setStock] = useState("0");
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     run(
       async () => {
         const result = article
-          ? await updateArticle(article.id, { name, reference, category, dimensions, color, price: num(price) })
-          : await createArticle({ name, reference, category, dimensions, color, price: num(price), stock: Math.floor(num(stock)) });
+          ? await updateArticle(article.id, { name, reference, category, dimensions, color, price: num(price), cost: num(cost), transport: num(transport), supplier })
+          : await createArticle({ name, reference, category, dimensions, color, price: num(price), cost: num(cost), transport: num(transport), supplier, stock: Math.floor(num(stock)) });
         if (result.ok) onClose();
         return result;
       },
@@ -65,6 +68,23 @@ export function ArticleForm({ article, categories, onClose }: { article?: Articl
       <label>
         <span className="mb-1 block text-xs font-medium text-slate-700">Prix TTC (€)</span>
         <input className={inputClass} inputMode="decimal" placeholder="À définir" value={price} onChange={(e) => setPrice(e.target.value)} />
+      </label>
+      <label className="col-span-2 sm:col-span-2">
+        <span className="mb-1 block text-xs font-medium text-slate-700">Fournisseur</span>
+        <input className={inputClass} list="fournisseurs-stock" placeholder="Facultatif" value={supplier} onChange={(e) => setSupplier(e.target.value)} />
+        <datalist id="fournisseurs-stock">
+          {suppliers.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
+      </label>
+      <label>
+        <span className="mb-1 block text-xs font-medium text-slate-700">Prix d&apos;achat (€)</span>
+        <input className={inputClass} inputMode="decimal" placeholder="Facultatif" value={cost} onChange={(e) => setCost(e.target.value)} />
+      </label>
+      <label>
+        <span className="mb-1 block text-xs font-medium text-slate-700">Transport / pièce (€)</span>
+        <input className={inputClass} inputMode="decimal" placeholder="Facultatif" value={transport} onChange={(e) => setTransport(e.target.value)} />
       </label>
       {article ? null : (
         <label>

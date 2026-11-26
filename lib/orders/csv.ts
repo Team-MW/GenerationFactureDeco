@@ -10,6 +10,11 @@ export interface ProductLine {
   color: string;
   /** null = colonne absente ou cellule vide. */
   price: number | null;
+  /** Prix d'achat, facultatif. */
+  cost: number | null;
+  /** Frais de transport par pièce, facultatif. */
+  transport: number | null;
+  supplier: string;
   stock: number | null;
 }
 
@@ -21,6 +26,9 @@ const HEADERS: Record<keyof ProductLine, string[]> = {
   dimensions: ["dimensions_configuration", "dimensions", "dimension", "configuration", "taille"],
   color: ["coloris", "couleur", "color", "finition"],
   price: ["prix_vente_eur", "prix_vente", "prix", "prix_ttc", "price", "tarif"],
+  cost: ["prix_achat_eur", "prix_achat", "prix_d_achat", "achat", "cout", "prix_revient", "cost"],
+  transport: ["transport_eur", "transport", "frais_transport", "frais_de_transport", "prix_transport", "livraison_fournisseur", "port"],
+  supplier: ["fournisseur", "supplier", "marque", "fabricant"],
   stock: ["stock", "quantite", "qte", "quantity", "disponible", "nombre"],
 };
 
@@ -82,8 +90,8 @@ export function parseProducts(raw: string): { lines: ProductLine[]; hasStock: bo
   if (!header || rows.length === 0) throw new Error("Le fichier est vide.");
   const titles = header.map(normalize);
   const column = (field: keyof ProductLine) => titles.findIndex((title) => HEADERS[field].includes(title));
-  const index = { reference: column("reference"), name: column("name"), category: column("category"), dimensions: column("dimensions"), color: column("color"), price: column("price"), stock: column("stock") };
-  if (index.name < 0) throw new Error("Colonne « nom » introuvable. Colonnes attendues : reference ; nom ; categorie ; dimensions ; coloris ; prix ; stock.");
+  const index = { reference: column("reference"), name: column("name"), category: column("category"), dimensions: column("dimensions"), color: column("color"), price: column("price"), cost: column("cost"), transport: column("transport"), supplier: column("supplier"), stock: column("stock") };
+  if (index.name < 0) throw new Error("Colonne « nom » introuvable. Colonnes attendues : reference ; nom ; categorie ; dimensions ; coloris ; prix ; fournisseur ; prix_achat ; transport ; stock.");
   const at = (row: string[], i: number) => (i >= 0 ? (row[i] ?? "").trim() : "");
   const lines = rows
     .map((row) => ({
@@ -93,6 +101,9 @@ export function parseProducts(raw: string): { lines: ProductLine[]; hasStock: bo
       dimensions: at(row, index.dimensions),
       color: at(row, index.color),
       price: index.price >= 0 ? number(row[index.price]) : null,
+      cost: index.cost >= 0 ? number(row[index.cost]) : null,
+      transport: index.transport >= 0 ? number(row[index.transport]) : null,
+      supplier: at(row, index.supplier),
       stock: index.stock >= 0 ? number(row[index.stock]) : null,
     }))
     .filter((line) => line.name !== "");
@@ -107,8 +118,8 @@ export function productsToCsv(rows: StockRow[]): string {
     return /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
   };
   const lines = [
-    ["reference", "nom", "categorie", "dimensions_configuration", "coloris", "prix_vente_eur", "stock", "reserve", "en_attente"],
-    ...rows.map((r) => [r.reference, r.name, r.category, r.dimensions, r.color, r.price > 0 ? String(r.price).replace(".", ",") : "", r.stock, r.reserved, r.waiting]),
+    ["reference", "nom", "categorie", "dimensions_configuration", "coloris", "prix_vente_eur", "fournisseur", "prix_achat_eur", "transport_eur", "stock", "reserve", "en_attente"],
+    ...rows.map((r) => [r.reference, r.name, r.category, r.dimensions, r.color, r.price > 0 ? String(r.price).replace(".", ",") : "", r.supplier, r.cost > 0 ? String(r.cost).replace(".", ",") : "", r.transport > 0 ? String(r.transport).replace(".", ",") : "", r.stock, r.reserved, r.waiting]),
   ];
   return "﻿" + lines.map((line) => line.map(cell).join(";")).join("\r\n");
 }

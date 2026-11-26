@@ -25,19 +25,41 @@ export function explain(message: string): StoreError {
   return new StoreError("La base de données ne répond pas. Réessayez dans un instant.");
 }
 
+/**
+ * Appels que l'on peut rejouer sans risque après une coupure : les lectures, et les écritures qui donnent le même
+ * résultat une ou deux fois. Les enregistrements de commandes (gestion_save, lenbox_save) n'en font pas partie :
+ * rejoués à l'aveugle, ils pourraient créer un bon en double.
+ */
+const SAFE_RPC = new Set(["gestion_load", "lenbox_load", "lenbox_version"]);
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function request<T>(path: string, init: RequestInit & { headers?: Record<string, string> }): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(`${URL_BASE}/rest/v1/${path}`, {
-      ...init,
-      headers: { apikey: SECRET, "Content-Type": "application/json", ...init.headers },
-      cache: "no-store",
-      signal: AbortSignal.timeout(15000),
-    });
-  } catch (error) {
-    console.error("[supabase] réseau :", error instanceof Error ? error.message : error);
-    throw new StoreError("La base de données ne répond pas. Réessayez dans un instant.");
+  const rpcName = path.startsWith("rpc/") ? path.slice(4).split("?")[0] : null;
+  const safe = rpcName ? SAFE_RPC.has(rpcName) : init.method === "GET" || path.includes("on_conflict=");
+  // Une coupure réseau ou une réponse trop lente est le plus souvent passagère : on réessaie avant d'afficher une erreur.
+  const attempts = safe ? 3 : 1;
+  let response: Response | undefined;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      response = await fetch(`${URL_BASE}/rest/v1/${path}`, {
+        ...init,
+        headers: { apikey: SECRET, "Content-Type": "application/json", ...init.headers },
+        cache: "no-store",
+        signal: AbortSignal.timeout(safe ? 9000 : 15000),
+      });
+      // Erreur passagère côté serveur (surcharge, redémarrage) : même traitement qu'une coupure.
+      if (response.status >= 502 && response.status <= 504 && attempt < attempts) {
+        await pause(300 * attempt);
+        continue;
+      }
+      break;
+    } catch (error) {
+      console.error(`[supabase] réseau (essai ${attempt}/${attempts}) :`, error instanceof Error ? error.message : error);
+      if (attempt === attempts) throw new StoreError("La base de données ne répond pas. Réessayez dans un instant.");
+      await pause(300 * attempt);
+    }
   }
+  if (!response) throw new StoreError("La base de données ne répond pas. Réessayez dans un instant.");
   const text = await response.text();
   if (!response.ok) {
     let message = text;

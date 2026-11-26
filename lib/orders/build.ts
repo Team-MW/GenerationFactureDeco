@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { DELIVERY_MODES, articleLabel, cleanTime, orderTotals, parisToday, slotOfTime } from "./logic";
+import { DELIVERY_MODES, articleLabel, cleanTime, orderTotals, parisToday, slotOfTime, unitCost } from "./logic";
+import { transportTotals, type CostItem, type Transport } from "./pricing";
 import type { Article, Db, Order, OrderInput } from "./types";
 
 /** Briques communes à la création d'articles et de commandes (utilisées par les actions et par la simulation). */
@@ -40,17 +41,41 @@ export function parseQuantity(value: unknown): number {
 }
 
 /** Champs descriptifs d'un article, nettoyés. La référence, si elle est renseignée, doit être unique. */
-export function articleFields(db: Db, input: { name: unknown; reference: unknown; price: unknown; category?: unknown; dimensions?: unknown; color?: unknown }, selfId?: string) {
+export function articleFields(db: Db, input: { name: unknown; reference: unknown; price: unknown; cost?: unknown; transport?: unknown; truckCost?: unknown; truckUnits?: unknown; truckId?: unknown; truckQty?: unknown; customsRate?: unknown; customsFixed?: unknown; fees?: unknown; extras?: unknown; supplier?: unknown; category?: unknown; dimensions?: unknown; color?: unknown }, selfId?: string) {
   const name = clean(input.name, 120);
   if (!name) throw new UserError("Le nom de l'article est obligatoire.");
   const reference = clean(input.reference, 120);
   if (reference && db.articles.some((a) => a.id !== selfId && a.reference.toLowerCase() === reference.toLowerCase())) {
     throw new UserError(`La référence « ${reference} » est déjà utilisée par un autre article.`);
   }
-  return { name, reference, category: clean(input.category, 60), dimensions: clean(input.dimensions, 80), color: clean(input.color, 80), price: parsePrice(input.price, "Prix") };
+  return { name, reference, category: clean(input.category, 60), dimensions: clean(input.dimensions, 80), color: clean(input.color, 80), price: parsePrice(input.price, "Prix"), cost: parsePrice(input.cost ?? 0, "Prix d'achat"), transport: parsePrice(input.transport ?? 0, "Frais de transport"), supplier: clean(input.supplier, 80), ...costFields(input) };
 }
 
-export function makeArticle(db: Db, input: { name: unknown; reference: unknown; price: unknown; stock: unknown; category?: unknown; dimensions?: unknown; color?: unknown }): Article {
+/** Camion, douane et autres frais : montants positifs, 0 par défaut. */
+export function costFields(input: { truckCost?: unknown; truckUnits?: unknown; truckId?: unknown; truckQty?: unknown; customsRate?: unknown; customsFixed?: unknown; fees?: unknown; extras?: unknown }) {
+  // Postes de coût propres au produit : identifiant → valeur positive. Tout le reste est écarté.
+  const extras: Record<string, number> = {};
+  if (input.extras && typeof input.extras === "object") {
+    for (const [key, value] of Object.entries(input.extras as Record<string, unknown>).slice(0, 60)) {
+      const n = Number(value);
+      if (/^[A-Za-z0-9_-]{1,24}$/.test(key) && Number.isFinite(n) && n >= 0 && n <= 1_000_000) extras[key] = round2(n);
+    }
+  }
+  const customsRate = Number(input.customsRate ?? 0) || 0;
+  if (customsRate < 0 || customsRate > 100) throw new UserError("Le taux de douane doit être compris entre 0 et 100 %.");
+  return {
+    truckCost: parsePrice(input.truckCost ?? 0, "Coût du camion"),
+    truckUnits: Math.min(999999, Math.max(0, Math.floor(Number(input.truckUnits ?? 0) || 0))),
+    truckId: /^[A-Za-z0-9_-]{1,24}$/.test(String(input.truckId ?? "")) ? String(input.truckId) : "",
+    truckQty: Math.min(999999, Math.max(0, Math.floor(Number(input.truckQty ?? 0) || 0))),
+    customsRate: round2(customsRate),
+    customsFixed: parsePrice(input.customsFixed ?? 0, "Frais de douane"),
+    fees: parsePrice(input.fees ?? 0, "Autres frais"),
+    extras,
+  };
+}
+
+export function makeArticle(db: Db, input: { name: unknown; reference: unknown; price: unknown; cost?: unknown; transport?: unknown; truckCost?: unknown; truckUnits?: unknown; truckId?: unknown; truckQty?: unknown; customsRate?: unknown; customsFixed?: unknown; fees?: unknown; extras?: unknown; supplier?: unknown; stock: unknown; category?: unknown; dimensions?: unknown; color?: unknown }): Article {
   const fields = articleFields(db, input);
   const stock = Math.max(0, Math.floor(Number(input.stock) || 0));
   const article: Article = {
@@ -65,7 +90,13 @@ export function makeArticle(db: Db, input: { name: unknown; reference: unknown; 
 
 
 /** Ajoute une commande à la base en mémoire : contrôle les données, réserve le stock, attribue le numéro. */
-export function insertOrder(db: Db, input: OrderInput, prefix: string): Order {
+export function insertOrder(db: Db, input: OrderInput, prefix: string, costItems: CostItem[] = [], transports: Transport[] = []): Order {
+  // Part de transport de chaque article, d'après les camions enregistrés (calculée une fois pour toute la commande).
+  const trucks = transportTotals(db.articles, transports);
+  const resolved = (article: Article): Article => {
+    const entry = article.truckId ? trucks.get(article.truckId) : undefined;
+    return entry && entry.units > 0 ? { ...article, truckCost: entry.transport.cost, truckUnits: entry.units } : article;
+  };
   const name = clean(input.customer?.name, 120);
   if (!name) throw new UserError("Le nom du client est obligatoire.");
   const mode = input.delivery?.mode;
@@ -103,6 +134,7 @@ export function insertOrder(db: Db, input: OrderInput, prefix: string): Order {
       name: articleLabel(article),
       reference: article.reference,
       unitPrice: article.price,
+      unitCost: unitCost(resolved(article), costItems),
       quantity,
       reserved,
     };

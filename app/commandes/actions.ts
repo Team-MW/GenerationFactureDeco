@@ -4,11 +4,13 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { geocode } from "@/lib/orders/geocode";
 import { DELIVERY_MODES, PAYMENT_METHODS, cleanTime, fullAddress, hourLabel, isPickup, isStockComplete, orderTotals, parisToday, slotOfTime } from "@/lib/orders/logic";
-import { UserError, articleFields, clean, euros, id, insertOrder, isDate, frDate, log, makeArticle, now, parsePrice, round2, signToken } from "@/lib/orders/build";
+import { UserError, articleFields, clean, costFields, euros, id, insertOrder, isDate, frDate, log, makeArticle, now, parsePrice, round2, signToken } from "@/lib/orders/build";
 import { signUrl } from "@/lib/orders/signature";
 import { StoreError, currentScope, loadDb, mutate } from "@/lib/orders/store";
 import type { ArticleInput, Db, Order, OrderInput, PaymentMethod, Result, Slot } from "@/lib/orders/types";
 import { DEFAULT_SETTINGS, getSettings } from "@/lib/settings";
+import { getPricing, savePricing } from "@/lib/orders/charges";
+import { landedCost, withTransports } from "@/lib/orders/pricing";
 import { MAIL_CONFIGURED, MailError, isEmail, sendMail } from "@/lib/mail";
 import { EMAIL_KINDS, buildEmail, isEmailKind, type EmailKind } from "@/lib/orders/emails";
 import { renderDeliveryNote } from "@/lib/orders/pdf";
@@ -132,6 +134,193 @@ export async function setArticlePrice(articleId: string, price: number) {
   );
 }
 
+/** Champs de coût modifiables un par un dans les tableaux. */
+const COST_FIELDS = ["cost", "transport", "truckCost", "truckUnits", "customsRate", "customsFixed", "fees"] as const;
+export type CostField = (typeof COST_FIELDS)[number];
+
+/** Fixe un élément du coût d'un article (0 = non renseigné) : achat, transport, camion, douane ou frais. */
+export async function setArticleCost(articleId: string, field: CostField, amount: number) {
+  return run(() =>
+    mutate((db) => {
+      const article = db.articles.find((a) => a.id === articleId);
+      if (!article) throw new UserError("Article introuvable.");
+      if (!COST_FIELDS.includes(field)) throw new UserError("Champ inconnu.");
+      if (field === "cost") article.cost = parsePrice(amount, "Prix d'achat");
+      else if (field === "transport") {
+        // Un transport saisi à la main remplace la répartition d'un camion.
+        article.transport = parsePrice(amount, "Frais de transport");
+        article.truckCost = 0;
+        article.truckUnits = 0;
+      } else Object.assign(article, costFields({ ...article, [field]: amount }));
+      return undefined;
+    }),
+  );
+}
+
+export interface TransportInput {
+  /** Absent = nouveau transport. */
+  id?: string;
+  number: string;
+  date?: string;
+  cost: number;
+  note?: string;
+  /** Produits livrés par ce transport, avec le nombre de pièces de chacun. */
+  items?: { articleId: string; qty: number }[];
+  /** true = `items` est la liste complète (les autres produits sont détachés) ; false = on ajoute à l'existant. */
+  replace?: boolean;
+}
+
+/**
+ * Crée ou modifie un transport (camion, conteneur) et y rattache des produits.
+ * Son coût est ensuite réparti entre tous les articles qu'il contient : coût ÷ nombre total d'articles.
+ */
+export async function saveTransport(input: TransportInput) {
+  return run(async () => {
+    const pricing = await getPricing();
+    const number = clean(input.number, 40);
+    if (!number) throw new UserError("Donnez un numéro ou un nom à ce transport.");
+    const cost = parsePrice(input.cost, "Coût du transport");
+    const id = input.id && pricing.transports.some((t) => t.id === input.id) ? input.id : `t${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+    if (pricing.transports.some((t) => t.id !== id && t.number.toLowerCase() === number.toLowerCase())) throw new UserError(`Le numéro « ${number} » est déjà utilisé par un autre transport.`);
+    const transport = { id, number, date: isDate(input.date) ? input.date : "", cost, note: clean(input.note, 200) };
+    await savePricing({ ...pricing, transports: [...pricing.transports.filter((t) => t.id !== id), transport] });
+    if (input.items) {
+      const wanted = new Map(input.items.filter((item) => item && typeof item.articleId === "string").map((item) => [item.articleId, Math.min(999999, Math.max(1, Math.floor(Number(item.qty) || 1)))]));
+      await mutate((db) => {
+        for (const article of db.articles) {
+          const qty = wanted.get(article.id);
+          if (qty !== undefined) {
+            article.truckId = id;
+            article.truckQty = qty;
+          } else if (input.replace && article.truckId === id) {
+            article.truckId = "";
+            article.truckQty = 0;
+          }
+        }
+      });
+    }
+    return id;
+  });
+}
+
+/** Supprime un transport : ses produits sont détachés et retrouvent leur transport saisi à la main, s'il y en a un. */
+export async function deleteTransport(transportId: string) {
+  return run(async () => {
+    const pricing = await getPricing();
+    if (!pricing.transports.some((t) => t.id === transportId)) throw new UserError("Transport introuvable.");
+    await mutate((db) => {
+      for (const article of db.articles) {
+        if (article.truckId !== transportId) continue;
+        article.truckId = "";
+        article.truckQty = 0;
+      }
+    });
+    await savePricing({ ...pricing, transports: pricing.transports.filter((t) => t.id !== transportId) });
+    return undefined;
+  });
+}
+
+/** Rattache un produit à un transport (avec sa quantité), ou le détache (transportId vide). */
+export async function setArticleTransport(articleId: string, transportId: string, qty: number) {
+  return run(async () => {
+    if (transportId && !(await getPricing()).transports.some((t) => t.id === transportId)) throw new UserError("Transport introuvable.");
+    return mutate((db) => {
+      const article = db.articles.find((a) => a.id === articleId);
+      if (!article) throw new UserError("Article introuvable.");
+      article.truckId = transportId;
+      article.truckQty = transportId ? Math.min(999999, Math.max(1, Math.floor(Number(qty) || 1))) : 0;
+      return undefined;
+    });
+  });
+}
+
+export type BulkField = "price" | "cost" | "transport" | "customsRate" | "customsFixed" | "fees" | "supplier" | "category" | `extra:${string}`;
+/** fixer = donner la valeur ; pourcent = augmenter (ou baisser, si négatif) de x % ; coefficient = prix de vente TTC = coût de revient × coefficient. */
+export type BulkMode = "fixer" | "pourcent" | "coefficient";
+
+/**
+ * Modifie la même information sur plusieurs produits à la fois (cochés dans « Coûts & marges »).
+ * Renvoie le nombre de produits réellement modifiés.
+ */
+export async function bulkUpdateArticles(articleIds: string[], field: BulkField, value: string | number, mode: BulkMode = "fixer") {
+  return run(async () => {
+    if (!Array.isArray(articleIds) || articleIds.length === 0) throw new UserError("Aucun produit coché.");
+    const ids = new Set(articleIds.slice(0, 5000));
+    const pricing = await getPricing();
+    const amount = Number(String(value).replace(/\s/g, "").replace(",", "."));
+    const textFields = field === "supplier" || field === "category";
+    if (!textFields && !Number.isFinite(amount)) throw new UserError("Valeur invalide.");
+    if (mode === "coefficient" && field !== "price") throw new UserError("Le coefficient ne s'applique qu'au prix de vente.");
+    if (mode === "coefficient" && (amount <= 0 || amount > 100)) throw new UserError("Coefficient invalide.");
+    if (mode === "pourcent" && (textFields || amount < -95 || amount > 1000)) throw new UserError("Pourcentage invalide.");
+    if (mode === "fixer" && !textFields && amount < 0) throw new UserError("La valeur ne peut pas être négative.");
+    const extraId = field.startsWith("extra:") ? field.slice(6) : "";
+    if (extraId && !pricing.costItems.some((item) => item.id === extraId)) throw new UserError("Poste de coût introuvable.");
+    return mutate((db) => {
+      const resolved = new Map(withTransports(db.articles, pricing.transports).map((article) => [article.id, article]));
+      let updated = 0;
+      for (const article of db.articles) {
+        if (!ids.has(article.id)) continue;
+        if (field === "supplier") article.supplier = clean(value, 80);
+        else if (field === "category") article.category = clean(value, 60);
+        else if (extraId) article.extras = costFields({ ...article, extras: { ...article.extras, [extraId]: amount } }).extras;
+        else if (field === "price" && mode === "coefficient") {
+          // Prix de vente TTC = coût de revient HT × coefficient ; un produit sans coût connu est laissé tel quel.
+          const cost = landedCost(resolved.get(article.id) ?? article, pricing.costItems);
+          if (cost <= 0) continue;
+          article.price = round2(cost * amount);
+        } else {
+          const key = field as "price" | "cost" | "transport" | "customsRate" | "customsFixed" | "fees";
+          const next = mode === "pourcent" ? round2(article[key] * (1 + amount / 100)) : amount;
+          // Une hausse en pourcentage n'a pas de sens sur une valeur encore vide.
+          if (mode === "pourcent" && article[key] <= 0) continue;
+          if (key === "price") article.price = parsePrice(next, "Prix de vente");
+          else if (key === "cost") article.cost = parsePrice(next, "Prix d'achat");
+          else if (key === "transport") {
+            article.transport = parsePrice(next, "Transport");
+            article.truckCost = 0;
+            article.truckUnits = 0;
+          } else Object.assign(article, costFields({ ...article, [key]: next }));
+        }
+        updated += 1;
+      }
+      return updated;
+    });
+  });
+}
+
+/** Applique des prix de vente calculés (onglet PVC) à plusieurs produits d'un coup. */
+export async function applyPrices(prices: { id: string; price: number }[]) {
+  return run(() =>
+    mutate((db) => {
+      if (!Array.isArray(prices) || prices.length === 0) throw new UserError("Aucun prix à appliquer.");
+      let updated = 0;
+      for (const item of prices.slice(0, 5000)) {
+        const article = db.articles.find((a) => a.id === item?.id);
+        if (!article) continue;
+        const price = parsePrice(item.price, `Prix de « ${article.name} »`);
+        if (price <= 0) continue;
+        article.price = price;
+        updated += 1;
+      }
+      return updated;
+    }),
+  );
+}
+
+/** Enregistre les charges fixes et les réglages du calcul des prix (les postes de coût ne sont pas touchés ici). */
+export async function saveCharges(settings: unknown) {
+  return run(async () => {
+    const current = await getPricing();
+    return savePricing({ ...(settings as object), costItems: current.costItems, transports: current.transports });
+  });
+}
+
+/** Enregistre la liste des postes de coût du magasin (emballage, commission, SAV…). */
+export async function saveCostItems(costItems: unknown) {
+  return run(async () => (await savePricing({ ...(await getPricing()), costItems })).costItems);
+}
+
 export interface ImportedArticle {
   reference: string;
   name: string;
@@ -140,6 +329,9 @@ export interface ImportedArticle {
   color: string;
   /** null = le fichier ne donne pas l'information : on ne touche pas à la valeur existante. */
   price: number | null;
+  cost?: number | null;
+  transport?: number | null;
+  supplier?: string;
   stock: number | null;
 }
 
@@ -161,6 +353,8 @@ export async function importArticles(rows: ImportedArticle[], defaultStock: numb
         if (!name) throw new UserError(`Ligne ${index + 2} : le nom du produit est vide.`);
         const reference = clean(row.reference, 120);
         const price = row.price === null || row.price === undefined ? null : parsePrice(row.price, `Ligne ${index + 2} : prix`);
+        const cost = row.cost === null || row.cost === undefined ? null : parsePrice(row.cost, `Ligne ${index + 2} : prix d'achat`);
+        const transport = row.transport === null || row.transport === undefined ? null : parsePrice(row.transport, `Ligne ${index + 2} : transport`);
         const existing = reference ? byReference.get(reference.toLowerCase()) : undefined;
         if (existing) {
           existing.name = name;
@@ -168,6 +362,9 @@ export async function importArticles(rows: ImportedArticle[], defaultStock: numb
           existing.dimensions = clean(row.dimensions, 80);
           existing.color = clean(row.color, 80);
           if (price !== null && price > 0) existing.price = price;
+          if (cost !== null && cost > 0) existing.cost = cost;
+          if (transport !== null) existing.transport = transport;
+          if (clean(row.supplier, 80)) existing.supplier = clean(row.supplier, 80);
           if (row.stock !== null && row.stock !== undefined) {
             const next = quantity(row.stock);
             restocked ||= next > existing.stock;
@@ -175,7 +372,7 @@ export async function importArticles(rows: ImportedArticle[], defaultStock: numb
           }
           updated += 1;
         } else {
-          const article = makeArticle(db, { name, reference, category: row.category, dimensions: row.dimensions, color: row.color, price: price ?? 0, stock: row.stock === null || row.stock === undefined ? initial : quantity(row.stock) });
+          const article = makeArticle(db, { name, reference, category: row.category, dimensions: row.dimensions, color: row.color, price: price ?? 0, cost: cost ?? 0, transport: transport ?? 0, supplier: row.supplier, stock: row.stock === null || row.stock === undefined ? initial : quantity(row.stock) });
           if (reference) byReference.set(reference.toLowerCase(), article);
           restocked ||= article.stock > 0;
           created += 1;
@@ -214,8 +411,10 @@ async function locateOrder(orderId: string) {
 export async function createOrder(input: OrderInput) {
   return run(async () => {
     const scope = await currentScope();
+    // Les postes de coût du magasin entrent dans le coût de revient figé sur chaque ligne du bon.
+    const pricing = await getPricing().catch(() => null);
     const orderId = await mutate((db) => {
-      return insertOrder(db, input, scope === "test" ? "TEST" : "BL").id;
+      return insertOrder(db, input, scope === "test" ? "TEST" : "BL", pricing?.costItems ?? [], pricing?.transports ?? []).id;
     });
     await locate(orderId);
     // E-mails dès la création, si demandé : le bon de commande, et la date de livraison quand elle est déjà fixée.

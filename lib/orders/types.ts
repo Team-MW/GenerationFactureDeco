@@ -14,6 +14,26 @@ export interface Article {
   color: string;
   /** Prix de vente TTC, en euros. 0 = prix pas encore défini. */
   price: number;
+  /** Prix d'achat chez le fournisseur, facultatif. 0 = non renseigné. */
+  cost: number;
+  /** Frais de transport par pièce saisis à la main (utilisés quand aucun camion n'est renseigné), facultatif. */
+  transport: number;
+  /** Coût total du camion (ou conteneur) qui a livré l'article, et nombre total d'articles qu'il transportait. */
+  truckCost: number;
+  truckUnits: number;
+  /** Transport (camion, conteneur) auquel l'article est rattaché, et nombre de pièces de ce produit qu'il contenait. */
+  truckId: string;
+  truckQty: number;
+  /** Droits de douane, en % du prix d'achat + transport. */
+  customsRate: number;
+  /** Frais de douane en euros par pièce (s'ajoutent au pourcentage). Jamais soumis à la TVA. */
+  customsFixed: number;
+  /** Autres frais par pièce (manutention, emballage, assurance…). */
+  fees: number;
+  /** Valeur propre à ce produit pour un poste de coût du magasin (identifiant du poste → valeur). */
+  extras: Record<string, number>;
+  /** Fournisseur, facultatif. */
+  supplier: string;
   /** Quantité disponible (non réservée par une commande). */
   stock: number;
   createdAt: string;
@@ -24,6 +44,18 @@ export interface ArticleInput {
   name: string;
   reference: string;
   price: number;
+  /** Prix d'achat, frais de transport par pièce et fournisseur : facultatifs. */
+  cost?: number;
+  transport?: number;
+  truckCost?: number;
+  truckUnits?: number;
+  truckId?: string;
+  truckQty?: number;
+  customsRate?: number;
+  customsFixed?: number;
+  fees?: number;
+  extras?: Record<string, number>;
+  supplier?: string;
   category?: string;
   dimensions?: string;
   color?: string;
@@ -35,6 +67,8 @@ export interface OrderLine {
   name: string;
   reference: string;
   unitPrice: number;
+  /** Coût de revient HT de l'article (achat + transport + douane + frais) le jour de la commande ; 0 ou absent = inconnu. */
+  unitCost?: number;
   quantity: number;
   /** true = la quantité est sortie du stock et mise de côté pour cette commande. */
   reserved: boolean;
