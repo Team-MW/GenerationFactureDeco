@@ -6,7 +6,7 @@ import { importArticles, setArticleCost, setArticlePrice, setStock } from "@/app
 import { toast } from "@/lib/client";
 import { eur } from "@/lib/format";
 import { parseProducts, productsToCsv, type ProductLine } from "@/lib/orders/csv";
-import { landedCost, margin as productMargin, transportPerUnit, type CostItem } from "@/lib/orders/pricing";
+import { VAT_RATE, landedCost, margin as productMargin, transportPerUnit, type CostItem } from "@/lib/orders/pricing";
 import type { StockRow } from "@/lib/orders/stock";
 import type { Result } from "@/lib/orders/types";
 import { Card, buttonPrimary, buttonSecondary } from "../ui";
@@ -160,7 +160,7 @@ function ImportPanel({ rows, onClose }: { rows: StockRow[]; onClose: () => void 
 
 /** Tout le stock dans un seul grand tableau : recherche, filtres, tri, comptage, prix, ajout, import et export. */
 export default function StockGrid({ rows, costItems = [] }: { rows: StockRow[]; costItems?: CostItem[] }) {
-  const articleMargin = (article: StockRow) => productMargin(article, 20, costItems);
+  const articleMargin = (article: StockRow) => productMargin(article, VAT_RATE, costItems);
   const unitCost = (article: StockRow) => landedCost(article, costItems);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");

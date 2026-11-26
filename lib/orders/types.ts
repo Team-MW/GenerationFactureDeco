@@ -69,6 +69,8 @@ export interface OrderLine {
   unitPrice: number;
   /** Coût de revient HT de l'article (achat + transport + douane + frais) le jour de la commande ; 0 ou absent = inconnu. */
   unitCost?: number;
+  /** Frais de vente du jour de la commande, en proportion du prix HT (postes en % du prix de vente : commission, carte…). */
+  salesRate?: number;
   quantity: number;
   /** true = la quantité est sortie du stock et mise de côté pour cette commande. */
   reserved: boolean;

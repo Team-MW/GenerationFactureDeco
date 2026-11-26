@@ -83,7 +83,9 @@ export async function updateArticle(articleId: string, input: ArticleInput) {
       const article = db.articles.find((a) => a.id === articleId);
       if (!article) throw new UserError("Article introuvable.");
       // Les bons déjà émis gardent la désignation et le prix du jour de la commande.
-      Object.assign(article, articleFields(db, input, articleId));
+      // Seuls les champs envoyés sont modifiés : un formulaire qui ne connaît pas la douane, le transport numéroté
+      // ou les postes de coût ne doit pas les remettre à zéro.
+      Object.assign(article, articleFields(db, { ...article, ...input }, articleId));
       return undefined;
     }),
   );
@@ -151,6 +153,10 @@ export async function setArticleCost(articleId: string, field: CostField, amount
         article.transport = parsePrice(amount, "Frais de transport");
         article.truckCost = 0;
         article.truckUnits = 0;
+        // Le produit sort aussi de son transport numéroté : sinon la part du camion continuerait de s'appliquer
+        // et le montant saisi ici resterait sans effet.
+        article.truckId = "";
+        article.truckQty = 0;
       } else Object.assign(article, costFields({ ...article, [field]: amount }));
       return undefined;
     }),
@@ -280,6 +286,8 @@ export async function bulkUpdateArticles(articleIds: string[], field: BulkField,
             article.transport = parsePrice(next, "Transport");
             article.truckCost = 0;
             article.truckUnits = 0;
+            article.truckId = "";
+            article.truckQty = 0;
           } else Object.assign(article, costFields({ ...article, [key]: next }));
         }
         updated += 1;

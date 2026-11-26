@@ -97,7 +97,8 @@ export default async function SalesPage() {
         // Le prix de vente est TTC, le coût de revient HT : on compare hors taxes.
         const soldHt = sold / (1 + vatRate / 100);
         costedSales += soldHt;
-        profit += soldHt - line.unitCost * line.quantity;
+        // Même définition que dans « Coûts & marges » : prix HT − coût de revient − frais de vente (commission, carte…).
+        profit += soldHt * (1 - (line.salesRate ?? 0)) - line.unitCost * line.quantity;
       }
       const article = byArticle.get(line.articleId) ?? { label: line.name, quantity: 0, revenue: 0 };
       article.quantity += line.quantity;

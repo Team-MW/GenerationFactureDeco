@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { DELIVERY_MODES, articleLabel, cleanTime, orderTotals, parisToday, slotOfTime, unitCost } from "./logic";
-import { transportTotals, type CostItem, type Transport } from "./pricing";
+import { costBreakdown, transportTotals, type CostItem, type Transport } from "./pricing";
 import type { Article, Db, Order, OrderInput } from "./types";
 
 /** Briques communes à la création d'articles et de commandes (utilisées par les actions et par la simulation). */
@@ -135,6 +135,7 @@ export function insertOrder(db: Db, input: OrderInput, prefix: string, costItems
       reference: article.reference,
       unitPrice: article.price,
       unitCost: unitCost(resolved(article), costItems),
+      salesRate: costBreakdown(article, costItems).salesRate,
       quantity,
       reserved,
     };

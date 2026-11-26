@@ -130,9 +130,9 @@ export function costBreakdown(article: CostInput, items: CostItem[] = []): CostB
 /** Coût de revient HT d'une pièce (0 = inconnu). */
 export const landedCost = (article: CostInput, items: CostItem[] = []) => costBreakdown(article, items).total;
 
-/** Prix TTC → HT, et inversement. `vatRate` en % (20 par défaut). */
-export const exVat = (priceTtc: number, vatRate = 20) => round2(positive(priceTtc) / (1 + positive(vatRate) / 100));
-export const inclVat = (priceHt: number, vatRate = 20) => round2(positive(priceHt) * (1 + positive(vatRate) / 100));
+/** Prix TTC → HT, et inversement. `vatRate` en % (VAT_RATE par défaut). */
+export const exVat = (priceTtc: number, vatRate = VAT_RATE) => round2(positive(priceTtc) / (1 + positive(vatRate) / 100));
+export const inclVat = (priceHt: number, vatRate = VAT_RATE) => round2(positive(priceHt) * (1 + positive(vatRate) / 100));
 
 export interface Margin {
   /** Coût de revient HT. */
@@ -156,7 +156,7 @@ export interface Margin {
 }
 
 /** Marge brute d'un produit. null tant que le prix d'achat ou le prix de vente manque. */
-export function margin(article: CostInput & { price: number }, vatRate = 20, items: CostItem[] = []): Margin | null {
+export function margin(article: CostInput & { price: number }, vatRate = VAT_RATE, items: CostItem[] = []): Margin | null {
   const breakdown = costBreakdown(article, items);
   const cost = breakdown.total;
   if (cost <= 0 || !(article.price > 0)) return null;
@@ -300,7 +300,7 @@ export interface ChargeRate {
 }
 
 /** Poids des charges fixes dans chaque vente. */
-export function chargeRate(settings: PricingSettings, averageRevenueTtc: number, vatRate = 20): ChargeRate {
+export function chargeRate(settings: PricingSettings, averageRevenueTtc: number, vatRate = VAT_RATE): ChargeRate {
   const monthly = monthlyCharges(settings.charges, settings.employerRate);
   // Objectif saisi : hors taxes ou TTC selon le réglage ; sinon, la moyenne des ventes réelles (toujours TTC).
   const revenueHt = settings.monthlyRevenue > 0 ? (settings.revenueBasis === "ht" ? round2(settings.monthlyRevenue) : exVat(settings.monthlyRevenue, vatRate)) : exVat(positive(averageRevenueTtc), vatRate);
@@ -329,7 +329,7 @@ export interface Recommendation {
 const roundUp = (value: number, step: number) => (step > 0 ? Math.ceil(round2(value) / step) * step : round2(value));
 
 /** Prix plancher et prix de vente conseillé d'un produit. null tant que son prix d'achat n'est pas renseigné. */
-export function recommend(article: CostInput & { price: number }, charges: ChargeRate, settings: Pick<PricingSettings, "targetMargin" | "rounding"> & { costItems?: CostItem[] }, vatRate = 20): Recommendation | null {
+export function recommend(article: CostInput & { price: number }, charges: ChargeRate, settings: Pick<PricingSettings, "targetMargin" | "rounding"> & { costItems?: CostItem[] }, vatRate = VAT_RATE): Recommendation | null {
   const breakdown = costBreakdown(article, settings.costItems ?? []);
   const cost = breakdown.total;
   if (cost <= 0) return null;
@@ -348,7 +348,9 @@ export function recommend(article: CostInput & { price: number }, charges: Charg
     const salesCosts = round2(priceHt * salesRate);
     const net = round2(priceHt - cost - salesCosts - share);
     current = { priceHt, salesCosts, charges: share, net, netRate: priceHt > 0 ? net / priceHt : 0 };
-    status = priceHt < cost ? "perte" : article.price < floorTtc ? "sous-plancher" : article.price < advisedTtc ? "sous-conseille" : "ok";
+    // « Prix rentable » dès que le bénéfice visé est atteint : on compare au prix conseillé exact, pas à son arrondi
+    // (un prix de 1 058 € pour un conseillé de 1 056 € arrondi à 1 060 € est bien rentable).
+    status = priceHt < cost ? "perte" : article.price < floorTtc ? "sous-plancher" : article.price < inclVat(advisedHt, vatRate) ? "sous-conseille" : "ok";
   }
   return { cost, floorHt, floorTtc, advisedHt, advisedTtc, salesRate, current, status };
 }
@@ -387,7 +389,7 @@ export interface Profitability {
  * Le magasin gagne-t-il de l'argent à son chiffre d'affaires de référence ?
  * Une vente rapporte sa marge brute ; il faut que le total de ces marges dépasse les charges fixes du mois.
  */
-export function profitability(charges: ChargeRate, grossMarginPercent: number, vatRate = 20): Profitability | null {
+export function profitability(charges: ChargeRate, grossMarginPercent: number, vatRate = VAT_RATE): Profitability | null {
   if (!charges.known || charges.revenueHt <= 0) return null;
   const grossRate = Math.min(0.95, positive(grossMarginPercent) / 100);
   const grossMargin = round2(charges.revenueHt * grossRate);
