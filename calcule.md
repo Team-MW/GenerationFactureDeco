@@ -563,3 +563,44 @@ et même prix de vente dans les onglets Stock, Coûts et PVC et dans la fiche pr
 | La moyenne des ventes réelles incluait le mois en cours, incomplet, ce qui gonflait le taux de charges en début de mois. | Le mois en cours est ignoré dès qu'un mois complet existe. |
 | La marge du tableau des ventes ne retirait pas les frais de vente (commission, carte), contrairement à la marge des produits. | Les frais de vente sont figés sur la ligne de commande (`salesRate`) et déduits. |
 | Le taux de TVA était écrit à deux endroits (constante et valeurs par défaut des fonctions). | Une seule constante, `VAT_RATE`. |
+
+---
+
+## Cockpit des ventes (`/commandes/ventes`)
+
+Fichiers : `lib/orders/cockpit.ts` (tous les calculs, fonctions pures), `components/orders/Cockpit.tsx` (affichage, filtre de période), `app/commandes/ventes/page.tsx` (bloc « En ce moment »).
+
+**Principe.** `buildFacts` résume une fois chaque commande **non annulée** (les annulées ne sont que comptées). `analyse(facts, période, découpage)` regroupe ensuite ces résumés par **jour, semaine (lundi → dimanche) ou mois**. Toutes les dates sont à l'heure de Paris.
+
+| Chiffre | Règle |
+|---|---|
+| Ventes TTC | total de la commande (articles − remise + livraison + prestations ajoutées), **à la date de création** |
+| Commandes, panier moyen | nombre de commandes ; ventes ÷ commandes |
+| Encaissé | paiements **à leur date réelle** (acompte, solde livreur) ; un montant réglé sans détail est daté du jour de la commande et classé « Non précisé » |
+| Marge brute HT | par ligne : `prix HT × (1 − frais de vente) − coût de revient × quantité`, uniquement si le coût était connu le jour de la vente (`unitCost` figé sur la ligne) ; la remise de la commande est répartie au prorata. Le taux affiché = marge ÷ ventes HT **dont le coût est connu** |
+| Livraisons effectuées | comptées le jour où la commande passe à « terminée » (`doneAt`), même si la commande est plus ancienne ; délai moyen = jours entre création et livraison |
+| Clients nouveaux / déjà clients | client identifié par son téléphone (sinon son nom) ; nouveau = sa toute première commande est dans la période |
+| Période d'avant | même durée juste avant (7/30/90 jours, 12 mois) ; pour « Cette année » : la même partie de l'année précédente ; aucune pour « Depuis le début » |
+| Cumul | somme des ventes depuis le début de la période ; la courbe grise est la période d'avant décalée jour pour jour |
+| Découpage | au-delà de 100 barres, « par jour » passe automatiquement à « par semaine », puis « par mois » |
+
+**Bloc « En ce moment »** (ne dépend pas du filtre) : aujourd'hui vs hier ; semaine depuis lundi vs semaine dernière arrêtée au même jour ; mois vs mois dernier arrêté au même jour.
+**Objectif du mois** : ventes du mois HT (`TTC ÷ 1,20`, livraison comprise) comparées au seuil de rentabilité `charges fixes ÷ marge brute visée` (même calcul que la page Charges). Projection fin de mois = `ventes HT ÷ jours écoulés × jours du mois` (simple règle de trois, sans saisonnalité).
+**Valeur du stock** : `stock × prix de vente TTC` ; en coût de revient : `stock × coût de revient HT` (0 pour les produits sans prix d'achat, donc sous-estimé tant que les prix d'achat manquent).
+
+Contrôles vérifiés par test : somme des barres = total de la période, pour chaque découpage et chaque période ; dernier point du cumul = ventes ; jours de semaine, heures et moyens de paiement retombent sur les mêmes totaux.
+
+---
+
+## Cockpit des frais (`/stock/frais`)
+
+Fichiers : `app/stock/frais/page.tsx` (calculs, côté serveur) et `components/orders/FraisCharts.tsx` (graphiques). Aucune formule nouvelle : la page réutilise `chargeRate`, `profitability`, `chargesByCategory`, `transportTotals` et `costBreakdown`.
+
+| Chiffre | Règle |
+|---|---|
+| Charges par jour | `charges mensuelles × 12 ÷ 365` (jours calendaires, magasin ouvert ou fermé) |
+| Seuil de rentabilité | `charges mensuelles ÷ marge brute visée` (HT) ; en TTC `× 1,20` |
+| Sur 100 € payés | TVA `100 − 100 ÷ 1,20` ; marchandises `(100 ÷ 1,20) × (1 − marge brute visée)` ; charges `(100 ÷ 1,20) × charges ÷ CA HT de référence` ; bénéfice = le reste (s'il est négatif, un message indique ce qui manque) |
+| Courbe du seuil | marge brute = `ventes HT × marge visée` (droite qui monte) face aux charges fixes (droite plate) ; elles se croisent au seuil |
+| Résultat estimé d'un mois | `ventes HT réelles du mois × marge visée − charges fixes`. C'est une **estimation** : la marge réelle n'est connue que pour les articles ayant un prix d'achat. Les mois antérieurs à la première commande ne sont pas évalués |
+| Coût du stock | `coût de revient HT × pièces en stock` par produit chiffré (un produit à zéro compte pour une pièce), ventilé par nature (achat, transport, douane, frais, postes), par fournisseur et par famille |

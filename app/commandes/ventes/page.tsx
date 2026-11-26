@@ -1,20 +1,19 @@
 import { ArrowDownRight, ArrowUpRight, BarChart3, Plus } from "lucide-react";
 import Link from "next/link";
-import { MonthlyChart, RankList, type SalesMonth } from "@/components/orders/SalesCharts";
+import Cockpit from "@/components/orders/Cockpit";
 import { EmptyState } from "@/components/orders/bits";
-import { Card, CardHeader, PageHeader, buttonPrimary } from "@/components/ui";
-import { eur, eur0, monthLabel, monthShort } from "@/lib/format";
-import { DELIVERY_MODES, SHOPS, orderBalance, orderTotals } from "@/lib/orders/logic";
+import { Card, PageHeader, buttonPrimary } from "@/components/ui";
+import { eur0, monthLabel } from "@/lib/format";
+import { getPricing } from "@/lib/orders/charges";
+import { addMonths, buildFacts, daysBetween, revenueBetween, weekStart } from "@/lib/orders/cockpit";
+import { addDays, orderBalance, parisToday } from "@/lib/orders/logic";
+import { chargeRate, landedCost, profitability, withTransports } from "@/lib/orders/pricing";
+import { averageMonthlyRevenue } from "@/lib/orders/revenue";
 import { getSettings } from "@/lib/settings";
 import { loadDb } from "@/lib/orders/store";
-import type { DeliveryMode, ShopId } from "@/lib/orders/types";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Tableau des ventes" };
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
-/** Mois (AAAA-MM) d'une date ISO, à l'heure de Paris. */
-const parisMonth = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(new Date(iso)).slice(0, 7);
+export const metadata = { title: "Cockpit des ventes" };
 
 function Kpi({ label, value, children }: { label: string; value: string; children?: React.ReactNode }) {
   return (
@@ -44,15 +43,15 @@ function Delta({ current, previous, versus }: { current: number; previous?: numb
 }
 
 export default async function SalesPage() {
-  const { orders } = await loadDb();
-  const vatRate = (await getSettings()).vatRate;
-  // Les commandes annulées ne comptent pas dans les ventes.
-  const sales = orders.filter((o) => o.status !== "cancelled");
+  const [{ orders, articles }, settings, pricing] = await Promise.all([loadDb(), getSettings(), getPricing()]);
+  const vatRate = settings.vatRate;
+  const today = parisToday();
+  const facts = buildFacts(orders, articles, vatRate, today);
 
-  if (sales.length === 0) {
+  if (facts.sales.length === 0) {
     return (
       <>
-        <PageHeader title="Tableau des ventes" />
+        <PageHeader title="Cockpit des ventes" />
         <Card>
           <EmptyState icon={<BarChart3 size={26} strokeWidth={1.6} />} title="Pas encore de ventes" text="Les statistiques apparaîtront dès le premier bon de commande.">
             <Link href="/commandes/nouveau" className={buttonPrimary}>
@@ -64,175 +63,114 @@ export default async function SalesPage() {
     );
   }
 
-  const byMonth = new Map<string, SalesMonth>();
-  const byArticle = new Map<string, { label: string; quantity: number; revenue: number }>();
-  const byMode = new Map<DeliveryMode, number>();
-  const byShop = new Map<ShopId, { count: number; revenue: number }>();
-  let revenue = 0, paid = 0, discounts = 0, deliveryRevenue = 0, offered = 0;
-  // Bénéfice : uniquement sur les articles vendus dont le prix de revient (achat + transport) était connu.
-  let profit = 0, costedSales = 0, articleSales = 0;
+  // Repères du moment : chaque période est comparée à la précédente, arrêtée au même point.
+  const yesterday = addDays(today, -1);
+  const monday = weekStart(today);
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const day = revenueBetween(facts, today, today);
+  const dayBefore = revenueBetween(facts, yesterday, yesterday);
+  const week = revenueBetween(facts, monday, today);
+  const weekBefore = revenueBetween(facts, addDays(monday, -7), addDays(today, -7));
+  const month = revenueBetween(facts, monthStart, today);
+  const monthBefore = revenueBetween(facts, addMonths(monthStart, -1), addMonths(today, -1));
 
-  for (const order of sales) {
-    const totals = orderTotals(order);
-    const balance = orderBalance(order);
-    revenue += totals.total;
-    paid += balance.paid;
-    discounts += totals.discount;
-    deliveryRevenue += totals.delivery;
-    if (order.delivery.offered) offered += 1;
+  // Mois en cours face au seuil de rentabilité (charges fixes ÷ marge brute visée), hors taxes.
+  const analysis = profitability(chargeRate(pricing, averageMonthlyRevenue(orders).average, vatRate), pricing.grossMarginTarget, vatRate);
+  const monthHt = month.revenue / (1 + vatRate / 100);
+  const elapsed = daysBetween(monthStart, today) + 1;
+  const monthDays = daysBetween(monthStart, addMonths(monthStart, 1));
+  const projection = (monthHt / elapsed) * monthDays;
+  const breakEven = analysis && analysis.breakEvenHt > 0 ? analysis.breakEvenHt : 0;
 
-    const key = parisMonth(order.createdAt);
-    const month = byMonth.get(key) ?? { month: key, short: monthShort(key), label: monthLabel(key), revenue: 0, paid: 0, count: 0, average: 0 };
-    month.revenue += totals.total;
-    month.paid += balance.paid;
-    month.count += 1;
-    byMonth.set(key, month);
+  const active = orders.filter((o) => o.status === "active");
+  const toDeliver = active.filter((o) => o.scheduledDate).length;
+  const toSchedule = active.length - toDeliver;
+  const open = orders.filter((o) => o.status !== "cancelled" && !orderBalance(o).settled);
+  const rest = open.reduce((total, o) => total + orderBalance(o).rest, 0);
 
-    // La remise de la commande est répartie sur ses articles, au prorata de leur prix.
-    const kept = totals.subtotal > 0 ? (totals.subtotal - totals.discount) / totals.subtotal : 1;
-    for (const line of order.lines) {
-      const sold = line.unitPrice * line.quantity * kept;
-      articleSales += sold / (1 + vatRate / 100);
-      if (line.unitCost && line.unitCost > 0) {
-        // Le prix de vente est TTC, le coût de revient HT : on compare hors taxes.
-        const soldHt = sold / (1 + vatRate / 100);
-        costedSales += soldHt;
-        // Même définition que dans « Coûts & marges » : prix HT − coût de revient − frais de vente (commission, carte…).
-        profit += soldHt * (1 - (line.salesRate ?? 0)) - line.unitCost * line.quantity;
-      }
-      const article = byArticle.get(line.articleId) ?? { label: line.name, quantity: 0, revenue: 0 };
-      article.quantity += line.quantity;
-      article.revenue += line.unitPrice * line.quantity;
-      byArticle.set(line.articleId, article);
-    }
-    byMode.set(order.delivery.mode, (byMode.get(order.delivery.mode) ?? 0) + 1);
-    const shop = byShop.get(order.shop) ?? { count: 0, revenue: 0 };
-    shop.count += 1;
-    shop.revenue += totals.total;
-    byShop.set(order.shop, shop);
-  }
-
-  const months = [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
-  for (const m of months) {
-    m.revenue = round2(m.revenue);
-    m.paid = round2(m.paid);
-    m.average = round2(m.revenue / m.count);
-  }
-  const last = months.at(-1)!;
-  const previous = months.at(-2);
-  const versus = previous ? `${last.short} vs ${previous.short}` : last.label;
-  const rest = round2(revenue - paid);
-  const unpaid = sales.filter((o) => !orderBalance(o).settled).length;
-
-  const topArticles = [...byArticle.values()]
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 8)
-    .map((a) => ({ label: a.label, value: a.revenue, detail: `${a.quantity} vendu${a.quantity > 1 ? "s" : ""} · ${eur(a.revenue)}` }));
-  const modes = (Object.keys(DELIVERY_MODES) as DeliveryMode[]).map((mode) => {
-    const count = byMode.get(mode) ?? 0;
-    return { label: DELIVERY_MODES[mode].label, value: count, detail: `${count} · ${Math.round((count / sales.length) * 100)} %` };
-  });
-  const shops = (Object.keys(SHOPS) as ShopId[]).filter((id) => id === "toulouse" || byShop.has(id)).map((id) => {
-    const shop = byShop.get(id) ?? { count: 0, revenue: 0 };
-    return { label: SHOPS[id].label, value: shop.revenue, detail: `${shop.count} commande${shop.count > 1 ? "s" : ""} · ${eur(shop.revenue)}` };
-  });
+  const stock = withTransports(articles, pricing.transports);
+  const pieces = stock.reduce((n, a) => n + Math.max(0, a.stock), 0);
+  const stockValue = stock.reduce((n, a) => n + Math.max(0, a.stock) * a.price, 0);
+  const stockCost = stock.reduce((n, a) => n + Math.max(0, a.stock) * landedCost(a, pricing.costItems), 0);
+  const empty = stock.filter((a) => a.stock <= 0).length;
 
   return (
     <>
-      <PageHeader title="Tableau des ventes" subtitle={`${sales.length} commande${sales.length > 1 ? "s" : ""} hors annulations · montants TTC`} />
+      <PageHeader title="Cockpit des ventes" subtitle={`${facts.sales.length} commande${facts.sales.length > 1 ? "s" : ""} hors annulations · montants TTC sauf mention contraire`} />
 
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">En ce moment</h2>
       <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
-        <Kpi label="Ventes" value={eur0(revenue)}>
-          <Delta current={last.revenue} previous={previous?.revenue} versus={versus} />
+        <Kpi label="Aujourd'hui" value={eur0(day.revenue)}>
+          <div className="mb-1">{day.count} commande{day.count > 1 ? "s" : ""}</div>
+          <Delta current={day.revenue} previous={dayBefore.revenue} versus="vs hier" />
         </Kpi>
-        <Kpi label="Commandes" value={sales.length.toLocaleString("fr-FR")}>
-          <Delta current={last.count} previous={previous?.count} versus={versus} />
+        <Kpi label="Cette semaine" value={eur0(week.revenue)}>
+          <div className="mb-1">{week.count} commande{week.count > 1 ? "s" : ""} depuis lundi</div>
+          <Delta current={week.revenue} previous={weekBefore.revenue} versus="vs semaine dernière, au même jour" />
         </Kpi>
-        <Kpi label="Panier moyen" value={eur0(revenue / sales.length)}>
-          <Delta current={last.average} previous={previous?.average} versus={versus} />
+        <Kpi label={monthLabel(today.slice(0, 7))} value={eur0(month.revenue)}>
+          <div className="mb-1">{month.count} commande{month.count > 1 ? "s" : ""} ce mois-ci</div>
+          <Delta current={month.revenue} previous={monthBefore.revenue} versus="vs mois dernier, au même jour" />
         </Kpi>
         <Kpi label="Reste à encaisser" value={eur0(rest)}>
-          {unpaid} commande{unpaid > 1 ? "s" : ""} non soldée{unpaid > 1 ? "s" : ""} · {eur0(paid)} encaissés
+          {open.length} commande{open.length > 1 ? "s" : ""} non soldée{open.length > 1 ? "s" : ""}, toutes dates confondues
         </Kpi>
       </div>
 
-      <Card className={`mt-3 grid grid-cols-2 divide-slate-100 md:mt-4 lg:divide-x ${costedSales > 0 ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
-        {[
-          ...(costedSales > 0
-            ? [["Marge brute sur les articles (HT)", eur(round2(profit)), `${Math.round((profit / costedSales) * 100)} % de marge · calculé sur ${Math.round((costedSales / articleSales) * 100)} % des ventes d'articles (prix d'achat connu)`]]
-            : []),
-          ["Remises accordées", eur(round2(discounts)), "sur les articles"],
-          ["Livraisons facturées", eur(round2(deliveryRevenue)), "inclus dans les ventes"],
-          ["Livraisons offertes", String(offered), `sur ${sales.length} commande${sales.length > 1 ? "s" : ""}`],
-          ["Meilleur mois", months.reduce((a, b) => (b.revenue > a.revenue ? b : a)).label, eur0(Math.max(...months.map((m) => m.revenue)))],
-        ].map(([label, value, hint]) => (
-          <div key={label} className="px-5 py-3.5">
-            <div className="text-xs text-slate-500">{label}</div>
-            <div className="tabular mt-0.5 text-base font-semibold text-slate-900">{value}</div>
-            <div className="text-xs text-slate-400">{hint}</div>
+      <div className="mt-3 grid grid-cols-1 gap-3 md:mt-4 md:gap-4 xl:grid-cols-3">
+        <Card className="px-5 py-4 xl:col-span-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="text-sm font-semibold text-slate-900">Objectif du mois : couvrir les charges du magasin</h3>
+            <Link href="/stock/charges" className="text-xs font-medium text-slate-500 underline-offset-2 hover:underline">
+              Charges du magasin
+            </Link>
           </div>
-        ))}
-      </Card>
-
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader title="Ventes par mois" hint="Total TTC des commandes, selon leur date de création" />
-          <div className="px-3 pb-4 pt-3">
-            <MonthlyChart months={months} measure="revenue" />
-          </div>
+          {breakEven > 0 ? (
+            <>
+              <p className="mt-1 text-xs text-slate-500">
+                Il faut vendre {eur0(breakEven)} HT dans le mois pour payer les {eur0(analysis!.charges)} de charges fixes (avec {Math.round(analysis!.grossRate * 100)} % de marge brute).
+              </p>
+              <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span className="whitespace-nowrap text-2xl font-semibold tracking-tight text-slate-900">{eur0(monthHt)} HT</span>
+                <span className="text-sm text-slate-500">
+                  vendus · {Math.round((monthHt / breakEven) * 100)} % du seuil · jour {elapsed} sur {monthDays}
+                </span>
+              </div>
+              <div className="relative mt-2 h-2 rounded-full bg-blue-100" role="img" aria-label={`${Math.round((monthHt / breakEven) * 100)} % du seuil de rentabilité atteint`}>
+                <div className="h-2 rounded-full bg-[#257de0]" style={{ width: `${Math.min(100, (monthHt / breakEven) * 100)}%` }} />
+                {/* Repère : où il faudrait en être aujourd'hui pour atteindre le seuil en fin de mois. */}
+                <div className="absolute -top-1 h-4 w-0.5 bg-slate-900" style={{ left: `${(elapsed / monthDays) * 100}%` }} />
+              </div>
+              <div className="mt-2 flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs text-slate-500">
+                <span>Trait noir : là où il faudrait être aujourd&apos;hui ({eur0((breakEven * elapsed) / monthDays)} HT)</span>
+                <span>
+                  À ce rythme, fin de mois à <strong className="font-semibold text-slate-900">{eur0(projection)} HT</strong> :{" "}
+                  {projection >= breakEven ? `seuil dépassé de ${eur0(projection - breakEven)}` : `il manquerait ${eur0(breakEven - projection)}`}
+                </span>
+              </div>
+            </>
+          ) : (
+            <p className="mt-2 text-sm text-slate-500">Renseignez les charges du magasin (loyer, salaires…) et la marge brute visée pour suivre ici le seuil de rentabilité du mois.</p>
+          )}
         </Card>
-        <Card>
-          <CardHeader title="Articles les plus vendus" hint="Classés par chiffre d'affaires" />
-          <RankList rows={topArticles} empty="Aucun article vendu." />
+        <Card className="grid grid-cols-2 divide-x divide-y divide-slate-100">
+          {[
+            ["Livraisons programmées", String(toDeliver), "à livrer ou à retirer"],
+            ["À programmer", String(toSchedule), "commandes sans date"],
+            ["Stock", `${pieces.toLocaleString("fr-FR")} pièces`, `${empty} produit${empty > 1 ? "s" : ""} à zéro`],
+            ["Valeur du stock", eur0(stockValue), stockCost > 0 ? `au prix de vente · ${eur0(stockCost)} en coût de revient connu` : "au prix de vente TTC"],
+          ].map(([label, value, hint]) => (
+            <div key={label} className="px-4 py-3">
+              <div className="text-xs text-slate-500">{label}</div>
+              <div className="mt-0.5 text-base font-semibold text-slate-900">{value}</div>
+              <div className="text-xs text-slate-400">{hint}</div>
+            </div>
+          ))}
         </Card>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card>
-          <CardHeader title="Commandes par mois" hint="Nombre de bons de commande" />
-          <div className="px-3 pb-4 pt-3">
-            <MonthlyChart months={months} measure="count" />
-          </div>
-        </Card>
-        <Card>
-          <CardHeader title="Formules de livraison" hint="Répartition des commandes" />
-          <RankList rows={modes} empty="" />
-        </Card>
-        <Card>
-          <CardHeader title="Ventes par magasin" />
-          <RankList rows={shops} empty="" />
-        </Card>
-      </div>
-
-      <Card className="mt-4 overflow-hidden">
-        <CardHeader title="Synthèse mensuelle" />
-        <div className="mt-3 overflow-x-auto">
-          <table className="tabular w-full min-w-[520px] text-sm">
-            <thead>
-              <tr className="border-y border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <th className="px-5 py-2.5 text-left font-medium">Mois</th>
-                <th className="px-3 py-2.5 text-right font-medium">Commandes</th>
-                <th className="px-3 py-2.5 text-right font-medium">Ventes</th>
-                <th className="px-3 py-2.5 text-right font-medium">Panier moyen</th>
-                <th className="px-3 py-2.5 text-right font-medium">Encaissé</th>
-                <th className="px-5 py-2.5 text-right font-medium">Reste</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {[...months].reverse().map((m) => (
-                <tr key={m.month}>
-                  <td className="whitespace-nowrap px-5 py-2.5 font-medium text-slate-900">{m.label}</td>
-                  <td className="px-3 py-2.5 text-right text-slate-600">{m.count}</td>
-                  <td className="px-3 py-2.5 text-right font-medium text-slate-900">{eur(m.revenue)}</td>
-                  <td className="px-3 py-2.5 text-right text-slate-600">{eur(m.average)}</td>
-                  <td className="px-3 py-2.5 text-right text-slate-600">{eur(m.paid)}</td>
-                  <td className="px-5 py-2.5 text-right font-medium text-slate-900">{eur(round2(m.revenue - m.paid))}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      <h2 className="mb-1 mt-6 text-xs font-semibold uppercase tracking-wide text-slate-500">Statistiques par période</h2>
+      <Cockpit facts={facts} marginKnown={facts.sales.some((s) => s.costedHt > 0)} />
     </>
   );
 }

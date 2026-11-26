@@ -8,7 +8,7 @@ export default async function StockLayout({ children }: { children: React.ReactN
   return (
     <SectionShell
       companyName={(await getSettings()).companyName}
-      section="Stock"
+      section="Stock dashboard"
       wide
       nav={[
         { href: "/stock", label: "Stock", short: "Stock", icon: "stock", exact: true },
@@ -16,6 +16,7 @@ export default async function StockLayout({ children }: { children: React.ReactN
         { href: "/stock/transports", label: "Transports", short: "Camions", icon: "truck" },
         { href: "/stock/pvc", label: "Prix de vente (PVC)", short: "PVC", icon: "tags" },
         { href: "/stock/charges", label: "Charges du magasin", short: "Charges", icon: "charges" },
+        { href: "/stock/frais", label: "Cockpit des frais", short: "Frais", icon: "chart" },
       ]}
     >
       {children}

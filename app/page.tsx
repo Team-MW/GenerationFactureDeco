@@ -17,8 +17,8 @@ const SPACES = [
   },
   {
     href: "/stock",
-    title: "Stock",
-    description: "Produits et quantités dans un grand tableau : recherche, comptage, ajout et import de produits.",
+    title: "Stock dashboard",
+    description: "Stock, coûts et marges, transports, prix de vente et charges du magasin : tous les tableaux au même endroit.",
     icon: Boxes,
   },
   {
