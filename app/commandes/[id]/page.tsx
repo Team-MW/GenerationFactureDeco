@@ -2,6 +2,7 @@ import { ArrowLeft, Check, CheckCircle2, Download, Hourglass, MapPin, PenLine, P
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createSignLink } from "@/app/commandes/actions";
+import PrintButton from "@/components/orders/PrintButton";
 import EmailPanel from "@/components/orders/EmailPanel";
 import OrderActions, { PaymentControl, RemoveExtraButton } from "@/components/orders/OrderActions";
 import { PreparedBadge, StageBadge, StockBadge, Warning } from "@/components/orders/bits";
@@ -45,9 +46,12 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             <PreparedBadge order={order} />
           </div>
         </div>
-        <a href={`/api/commandes/${order.id}/bl?telecharger`} className={buttonSecondary}>
-          <Download size={16} /> Télécharger le bon de commande
-        </a>
+        <div className="flex flex-wrap gap-2">
+          <PrintButton href={`/api/commandes/${order.id}/bl`} label="Imprimer le bon" />
+          <a href={`/api/commandes/${order.id}/bl?telecharger`} className={buttonSecondary}>
+            <Download size={16} /> Télécharger
+          </a>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -147,9 +151,12 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
 
           <Card className="overflow-hidden">
             <CardHeader title="Bon de commande" hint="Généré automatiquement · recto commande, verso conditions générales">
-              <a href={`/api/commandes/${order.id}/bl`} target="_blank" rel="noreferrer" className="shrink-0 text-sm font-medium text-slate-900 underline underline-offset-4">
-                Ouvrir en grand
-              </a>
+              <div className="flex shrink-0 items-center gap-3">
+                <PrintButton href={`/api/commandes/${order.id}/bl`} className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-900 underline underline-offset-4 disabled:opacity-50" />
+                <a href={`/api/commandes/${order.id}/bl`} target="_blank" rel="noreferrer" className="text-sm font-medium text-slate-900 underline underline-offset-4">
+                  Ouvrir en grand
+                </a>
+              </div>
             </CardHeader>
             <iframe src={`/api/commandes/${order.id}/bl#view=FitH&toolbar=1`} title={`Bon de commande ${order.number}`} className="mt-3 h-[640px] w-full border-t border-slate-100 bg-slate-100" />
           </Card>
