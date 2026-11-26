@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { ACCESS_COOKIE, accessPassword, accessToken } from "./lib/access";
 
-const PUBLIC_FILES = new Set(["/icon.png", "/apple-icon.png", "/icon-192.png", "/icon-512.png", "/manifest.webmanifest"]);
+const PUBLIC_FILES = new Set(["/icon.png", "/apple-icon.png", "/icon-192.png", "/icon-512.png", "/manifest.webmanifest", "/sw.js"]);
 
 /** Bloque toute page et toute API tant que le code d'accès n'a pas été saisi. */
 export async function proxy(request: NextRequest) {

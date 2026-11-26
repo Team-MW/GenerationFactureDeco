@@ -1,4 +1,5 @@
 import { getSettings } from "@/lib/settings";
+import InstallButton from "./InstallButton";
 import LoginForm from "./LoginForm";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <h1 className="mt-6 text-3xl font-semibold tracking-tight">Espace de gestion</h1>
         <p className="mt-2 text-sm text-neutral-400">Saisissez le code d&apos;accès pour continuer.</p>
         <LoginForm target={retour ?? "/"} />
+        <InstallButton />
       </div>
     </main>
   );
