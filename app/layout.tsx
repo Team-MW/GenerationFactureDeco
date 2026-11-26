@@ -12,6 +12,8 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 export const metadata: Metadata = {
   title: "DECOSHOP · Gestion",
   description: "Gestion des commandes et facturation Lenbox",
+  // Ajoutée à l'écran d'accueil du téléphone, l'application s'ouvre en plein écran sous son nom.
+  appleWebApp: { capable: true, title: "DECOSHOP", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

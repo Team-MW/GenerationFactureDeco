@@ -13,16 +13,24 @@ import nodemailer, { type Transporter } from "nodemailer";
  *   MAIL_BCC        copie cachée de chaque envoi     facultatif (pour garder une trace)
  */
 const env = process.env;
-const port = Number(env.SMTP_PORT) || 587;
+/**
+ * Valeur d'une variable, nettoyée : espaces autour et guillemets d'encadrement retirés.
+ * Chez un hébergeur, une valeur collée avec ses guillemets ("mot de passe") est transmise telle quelle,
+ * guillemets compris, et le serveur d'e-mail refuse alors l'identification.
+ */
+const value = (name: string) => (env[name] ?? "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+const port = Number(value("SMTP_PORT")) || 587;
+const host = value("SMTP_HOST");
 const config = {
-  host: (env.SMTP_HOST ?? "").trim(),
+  host,
   port,
-  secure: env.SMTP_SECURE ? env.SMTP_SECURE === "true" : port === 465,
-  user: (env.SMTP_USER ?? "").trim(),
-  password: env.SMTP_PASSWORD ?? "",
-  from: (env.MAIL_FROM ?? env.SMTP_USER ?? "").trim(),
-  replyTo: (env.MAIL_REPLY_TO ?? "").trim(),
-  bcc: (env.MAIL_BCC ?? "").trim(),
+  secure: value("SMTP_SECURE") ? value("SMTP_SECURE") === "true" : port === 465,
+  user: value("SMTP_USER"),
+  // Gmail affiche ses mots de passe d'application par groupes de quatre lettres : les espaces n'en font pas partie.
+  password: /gmail\.com$|googlemail\.com$/i.test(host) ? value("SMTP_PASSWORD").replace(/\s+/g, "") : value("SMTP_PASSWORD"),
+  from: value("MAIL_FROM") || value("SMTP_USER"),
+  replyTo: value("MAIL_REPLY_TO"),
+  bcc: value("MAIL_BCC"),
 };
 
 export const MAIL_CONFIGURED = Boolean(config.host && config.from);
