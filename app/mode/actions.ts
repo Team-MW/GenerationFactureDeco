@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { ACCESS_COOKIE, accessPassword, accessToken } from "@/lib/access";
 import { TEST_COOKIE, resetTestData } from "@/lib/orders/store";
+import { resetTestSav } from "@/lib/sav/store";
 
 async function allowed(): Promise<boolean> {
   const password = accessPassword();
@@ -24,6 +25,7 @@ export async function resetSimulation(): Promise<{ ok: boolean; error?: string }
   if (!(await allowed())) return { ok: false, error: "Session expirée : reconnectez-vous." };
   try {
     await resetTestData();
+    await resetTestSav();
     revalidatePath("/", "layout");
     return { ok: true };
   } catch (error) {

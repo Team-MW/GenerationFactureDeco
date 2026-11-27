@@ -1,24 +1,29 @@
-import { ArrowLeft, Wrench } from "lucide-react";
-import Link from "next/link";
+import SavBoard, { type SavOrder } from "@/components/sav/SavBoard";
+import { PageHeader } from "@/components/ui";
+import { parisToday } from "@/lib/orders/logic";
+import { loadDb } from "@/lib/orders/store";
+import { getSav } from "@/lib/sav/store";
 
+export const dynamic = "force-dynamic";
 export const metadata = { title: "SAV" };
 
-/** Espace SAV : emplacement réservé, le fonctionnement reste à définir. */
-export default function SavPage() {
+/** Service après-vente : on enregistre la demande du client, puis on fixe un rendez-vous chez lui. */
+export default async function SavPage() {
+  const [sav, db] = await Promise.all([getSav(), loadDb()]);
+  // Les bons de commande servent à pré-remplir le client et le produit d'une nouvelle demande.
+  const orders: SavOrder[] = db.orders
+    .filter((order) => order.status !== "cancelled")
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 500)
+    .map((order) => ({
+      number: order.number,
+      customer: { name: order.customer.name, phone: order.customer.phone, email: order.customer.email, address: order.customer.address, postalCode: order.customer.postalCode, city: order.customer.city },
+      products: order.lines.map((line) => line.name),
+    }));
   return (
-    <main className="grid min-h-full place-items-center bg-black px-5 py-10 text-white">
-      <div className="w-full max-w-md text-center">
-        <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white/10">
-          <Wrench size={26} strokeWidth={1.6} />
-        </span>
-        <h1 className="mt-6 text-3xl font-semibold tracking-tight">SAV</h1>
-        <p className="mt-3 text-sm text-neutral-400">
-          L&apos;espace service après-vente est en préparation. Il servira à suivre les réclamations, les retours et les réparations des clients.
-        </p>
-        <Link href="/" className="mt-8 inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2.5 text-sm font-medium transition hover:bg-white/10">
-          <ArrowLeft size={16} /> Retour à l&apos;accueil
-        </Link>
-      </div>
-    </main>
+    <>
+      <PageHeader title="SAV" subtitle="Enregistrez la demande du client, puis fixez un rendez-vous chez lui" />
+      <SavBoard tickets={sav.tickets} orders={orders} today={parisToday()} />
+    </>
   );
 }

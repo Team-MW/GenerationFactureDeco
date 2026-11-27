@@ -17,6 +17,7 @@ import {
   Settings,
   Plus,
   Truck,
+  Wrench,
   XCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -37,6 +38,7 @@ const ICONS: Record<string, LucideIcon> = {
   calculator: Calculator,
   tags: Tags,
   charges: Landmark,
+  wrench: Wrench,
 };
 
 export interface NavItem {

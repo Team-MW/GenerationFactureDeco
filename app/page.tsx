@@ -39,7 +39,7 @@ const SPACES = [
   {
     href: "/sav",
     title: "SAV",
-    description: "Service après-vente : réclamations, retours et réparations. Bientôt disponible.",
+    description: "Service après-vente : demandes des clients et rendez-vous chez eux.",
     icon: Wrench,
   },
   {
