@@ -6,7 +6,7 @@ import { bulkUpdateArticles, saveCostItems, saveTransport, setArticleCost, setAr
 import { toast } from "@/lib/client";
 import { eur } from "@/lib/format";
 import Link from "next/link";
-import { KIND_LABEL, costBreakdown, exVat, margin, transportTotals, type CostItem, type CostKind, type PricingSettings } from "@/lib/orders/pricing";
+import { KIND_LABEL, chargeRate, costBreakdown, exVat, margin, recommend, transportTotals, type CostItem, type CostKind, type PricingSettings } from "@/lib/orders/pricing";
 import type { StockRow } from "@/lib/orders/stock";
 import { Card, buttonPrimary, buttonSecondary } from "../ui";
 import { useAction } from "./OrderActions";
@@ -18,7 +18,7 @@ const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLo
 const num = (s: string) => Number(String(s).replace(/\s/g, "").replace(",", ".")) || 0;
 const pct = (rate: number) => `${(rate * 100).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} %`;
 
-type SortKey = "name" | "supplier" | "cost" | "transport" | "total" | "price" | "margin" | "rate" | "stock";
+type SortKey = "name" | "supplier" | "cost" | "transport" | "total" | "advised" | "price" | "margin" | "rate" | "stock";
 type Only = "" | "chiffres" | "a-chiffrer" | "perte";
 
 function Tile({ label, value, hint, tone = "" }: { label: string; value: string; hint?: string; tone?: string }) {
@@ -211,7 +211,12 @@ export default function CostTable({ rows, vatRate, pricing, averageRevenue }: { 
     return `CAM-${String(Math.max(0, ...used) + 1).padStart(3, "0")}`;
   }, [pricing.transports]);
 
-  const computed = useMemo(() => rows.map((row) => ({ row, cost: costBreakdown(row, items), margin: margin(row, vatRate, items), pieces: row.stock + row.reserved })), [rows, vatRate, items]);
+  // Même calcul que la page « Prix de vente (PVC) », avec les réglages enregistrés (charges, marge visée, arrondi).
+  const charges = useMemo(() => chargeRate(pricing, averageRevenue, vatRate), [pricing, averageRevenue, vatRate]);
+  const computed = useMemo(
+    () => rows.map((row) => ({ row, cost: costBreakdown(row, items), margin: margin(row, vatRate, items), advice: recommend(row, charges, pricing, vatRate), pieces: row.stock + row.reserved })),
+    [rows, vatRate, items, charges, pricing],
+  );
   const categories = useMemo(() => [...new Set(rows.map((a) => a.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr")), [rows]);
   const suppliers = useMemo(() => [...new Set(rows.map((a) => a.supplier).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr")), [rows]);
 
@@ -229,6 +234,8 @@ export default function CostTable({ rows, vatRate, pricing, averageRevenue }: { 
           return item.cost.transport;
         case "total":
           return item.cost.total;
+        case "advised":
+          return item.advice?.advisedTtc ?? -Infinity;
         case "price":
           return item.row.price;
         case "margin":
@@ -539,6 +546,7 @@ export default function CostTable({ rows, vatRate, pricing, averageRevenue }: { 
                   <th scope="col" className="px-2.5 py-2.5 text-right font-medium">Douane</th>
                   <th scope="col" className="px-2.5 py-2.5 text-right font-medium">Coût total TTC</th>
                   {header("total", "Coût de revient HT")}
+                  {header("advised", "Prix conseillé TTC")}
                   {header("price", "Vente TTC")}
                   <th scope="col" className="px-2.5 py-2.5 text-right font-medium">Vente HT</th>
                   {header("margin", "Marge brute")}
@@ -547,7 +555,7 @@ export default function CostTable({ rows, vatRate, pricing, averageRevenue }: { 
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {list.map(({ row, cost, margin: m, pieces }) => {
+                {list.map(({ row, cost, margin: m, advice, pieces }) => {
                   const viaTruck = row.truckCost > 0 && row.truckUnits > 0;
                   const linked = row.truckId ? trucks.get(row.truckId) : undefined;
                   return (
@@ -610,6 +618,20 @@ export default function CostTable({ rows, vatRate, pricing, averageRevenue }: { 
                       </td>
                       <td className="tabular whitespace-nowrap px-2.5 py-2 text-right font-semibold text-slate-900">{cost.total > 0 ? eur(cost.totalTtc) : dash}</td>
                       <td className="tabular whitespace-nowrap px-2.5 py-2 text-right font-semibold text-slate-900">{cost.total > 0 ? eur(cost.total) : dash}</td>
+                      <td className="tabular whitespace-nowrap bg-sky-50/60 px-2.5 py-2 text-right" title={advice ? `Prix plancher : ${eur(advice.floorTtc)} · même calcul que la page Prix de vente (PVC)` : "Renseignez le prix d'achat pour obtenir un prix conseillé"}>
+                        {advice ? (
+                          <>
+                            <div className="font-semibold text-slate-900">{eur(advice.advisedTtc)}</div>
+                            {row.price > 0 && row.price !== advice.advisedTtc ? (
+                              <div className={`text-[11px] ${row.price < advice.advisedTtc ? "text-amber-700" : "text-emerald-700"}`}>
+                                {row.price < advice.advisedTtc ? "vendu " + eur(advice.advisedTtc - row.price) + " en dessous" : "vendu " + eur(row.price - advice.advisedTtc) + " au-dessus"}
+                              </div>
+                            ) : null}
+                          </>
+                        ) : (
+                          dash
+                        )}
+                      </td>
                       <td className="tabular whitespace-nowrap px-2.5 py-1">
                         <div className="flex">
                           <QuickEdit decimal value={row.price} label={`Prix de vente de ${row.name}`} done="Prix de vente enregistré" save={(next) => setArticlePrice(row.id, next)} display={row.price > 0 ? <span className="font-medium text-slate-900">{eur(row.price)}</span> : <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">À définir</span>} />
@@ -639,6 +661,7 @@ export default function CostTable({ rows, vatRate, pricing, averageRevenue }: { 
                   </td>
                   <td className="tabular whitespace-nowrap px-2.5 py-2.5 text-right">{costed.length ? eur(costed.reduce((t, item) => t + item.cost.totalTtc * item.pieces, 0)) : "—"}</td>
                   <td className="tabular whitespace-nowrap px-2.5 py-2.5 text-right">{costed.length ? eur(stockCost) : "—"}</td>
+                  <td className="tabular whitespace-nowrap px-2.5 py-2.5 text-right" title="Valeur des pièces en magasin au prix conseillé">{costed.length ? eur(list.reduce((t, item) => t + (item.advice?.advisedTtc ?? 0) * item.pieces, 0)) : "—"}</td>
                   <td className="tabular whitespace-nowrap px-2.5 py-2.5 text-right">{eur(list.reduce((t, item) => t + item.row.price * item.pieces, 0))}</td>
                   <td className="tabular whitespace-nowrap px-2.5 py-2.5 text-right">{eur(list.reduce((t, item) => t + exVat(item.row.price, vatRate) * item.pieces, 0))}</td>
                   <td className={`tabular whitespace-nowrap px-2.5 py-2.5 text-right ${stockMargin < 0 ? "text-rose-700" : "text-emerald-700"}`}>{priced.length ? eur(stockMargin) : "—"}</td>
