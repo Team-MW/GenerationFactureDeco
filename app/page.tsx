@@ -1,4 +1,4 @@
-import { ArrowUpRight, Boxes, CreditCard, Package, PackageCheck, Truck } from "lucide-react";
+import { ArrowUpRight, Boxes, CreditCard, Package, PackageCheck, Truck, Wrench } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -35,6 +35,12 @@ const SPACES = [
     title: "Livreur",
     description: "Tournée du jour, itinéraire sur la carte et confirmation des livraisons.",
     icon: Truck,
+  },
+  {
+    href: "/sav",
+    title: "SAV",
+    description: "Service après-vente : réclamations, retours et réparations. Bientôt disponible.",
+    icon: Wrench,
   },
   {
     href: "/lenbox",
