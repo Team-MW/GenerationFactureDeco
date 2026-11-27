@@ -46,6 +46,7 @@ export function cleanSav(input: unknown): SavDb {
       visitNote: text(t.visitNote, 500),
       report: text(t.report, 2000),
       doneAt: t.doneAt ? text(t.doneAt, 40) : null,
+      refunded: typeof t.refunded === "number" && t.refunded >= 0 ? Math.round(t.refunded * 100) / 100 : null,
       history: (Array.isArray(t.history) ? t.history : []).slice(-100).map((h) => ({ at: text(h?.at, 40), text: text(h?.text, 300) })),
     }));
   return { tickets, counter: Math.max(0, Math.floor(Number(raw.counter) || 0), tickets.length) };

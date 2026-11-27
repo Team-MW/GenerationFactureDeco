@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { StoreError, USES_SUPABASE, readValue, replaceValueIfVersion, rpc, writeValue } from "../supabase";
 import { demoDb } from "./demo";
 import { createCache } from "../swr";
-import type { Article, Db, Extra, Order, Payment, ShopId, Signature } from "./types";
+import type { Article, Db, Extra, Order, Payment, Refund, ShopId, Signature } from "./types";
 
 /**
  * Stockage des articles et des commandes.
@@ -50,7 +50,7 @@ interface OrderRow {
   geo: Order["geo"];
   history: Order["history"];
   /** Champs ajoutés après coup, regroupés pour éviter une migration à chaque évolution. */
-  extra: { shop?: ShopId; observations?: string; paid?: number; time?: string; payments?: Payment[]; extras?: Extra[]; geoFailed?: boolean; emails?: Order["emails"]; signToken?: string; signature?: Signature | null } | null;
+  extra: { shop?: ShopId; observations?: string; paid?: number; time?: string; payments?: Payment[]; extras?: Extra[]; geoFailed?: boolean; emails?: Order["emails"]; signToken?: string; signature?: Signature | null; refund?: Refund | null } | null;
 }
 
 /**
@@ -135,6 +135,7 @@ const orderFromRow = (r: OrderRow): Order => withPayments({
   history: r.history ?? [],
   signToken: r.extra?.signToken ?? "",
   signature: r.extra?.signature ?? null,
+  refund: r.extra?.refund ?? null,
 });
 
 const orderToRow = (o: Order): OrderRow => ({
@@ -154,7 +155,7 @@ const orderToRow = (o: Order): OrderRow => ({
   done_at: o.doneAt,
   geo: o.geo,
   history: o.history,
-  extra: { shop: o.shop, observations: o.observations, paid: o.paid, time: o.time, payments: o.payments, extras: o.extras, geoFailed: o.geoFailed ?? false, emails: o.emails, signToken: o.signToken, signature: o.signature },
+  extra: { shop: o.shop, observations: o.observations, paid: o.paid, time: o.time, payments: o.payments, extras: o.extras, geoFailed: o.geoFailed ?? false, emails: o.emails, signToken: o.signToken, signature: o.signature, refund: o.refund ?? null },
 });
 
 async function loadRemote(): Promise<{ db: Db; version: number }> {

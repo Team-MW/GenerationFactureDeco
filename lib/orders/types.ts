@@ -129,6 +129,17 @@ export interface Signature {
   snapshot: SignedOrder;
 }
 
+/** Remboursement validé : la commande passe à « annulée » et sort de tous les chiffres. */
+export interface Refund {
+  at: string;
+  /** Montant rendu au client, en euros. */
+  amount: number;
+  /** Les articles ont été remis en stock. */
+  restocked: boolean;
+  /** Numéro de la demande de SAV à l'origine du remboursement. */
+  sav: string;
+}
+
 export interface Order {
   id: string;
   /** Numéro du bon de commande, ex. BL-2026-0001. */
@@ -168,10 +179,12 @@ export interface Order {
   /** Jeton secret du lien de signature envoyé au client (vide = pas encore de lien). */
   signToken: string;
   signature: Signature | null;
+  /** Présent quand la commande a été remboursée au client. */
+  refund?: Refund | null;
 }
 
 /** Ce qui est figé au moment de la signature. */
-export type SignedOrder = Omit<Order, "history" | "emails" | "signature" | "signToken" | "geo" | "geoFailed">;
+export type SignedOrder = Omit<Order, "history" | "emails" | "signature" | "signToken" | "geo" | "geoFailed" | "refund">;
 
 export interface Depot {
   address: string;

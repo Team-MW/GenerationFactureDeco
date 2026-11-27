@@ -107,7 +107,7 @@ export function stageLabel(order: Order): string {
   const pickup = isPickup(order);
   switch (orderStage(order)) {
     case "annulee":
-      return "Annulée";
+      return order.refund ? "Remboursée" : "Annulée";
     case "terminee":
       return pickup ? "Retirée" : "Livrée";
     case "attente":
@@ -164,7 +164,7 @@ export function fullAddress(order: Pick<Order, "customer">): string {
 
 /** Copie de la commande à figer au moment où le client signe. */
 export function snapshotOf(order: Order): SignedOrder {
-  const { history: _h, emails: _e, signature: _s, signToken: _t, geo: _g, geoFailed: _f, ...rest } = order;
+  const { history: _h, emails: _e, signature: _s, signToken: _t, geo: _g, geoFailed: _f, refund: _r, ...rest } = order;
   return structuredClone(rest);
 }
 

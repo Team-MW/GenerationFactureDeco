@@ -52,7 +52,7 @@ function OrderCard({ order }: { order: Order }) {
 
       {closed ? (
         <p className="mt-3 text-xs text-slate-500">
-          {order.status === "cancelled" ? "Commande annulée" : isPickup(order) ? "Retirée par le client" : "Livrée"}
+          {order.status === "cancelled" ? (order.refund ? "Commande remboursée" : "Commande annulée") : isPickup(order) ? "Retirée par le client" : "Livrée"}
           {order.preparedAt ? ` · préparée le ${when(order.preparedAt)}` : ""}
         </p>
       ) : order.prepared ? (

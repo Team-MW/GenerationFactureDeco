@@ -1,5 +1,6 @@
 "use client";
 
+import { AddressInput, PhoneInput } from "../ContactInputs";
 import { CalendarClock, Check, Gift, Hourglass, Loader2, Minus, Plus, Search, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -153,7 +154,7 @@ export default function OrderForm({ articles, agenda, today, mailReady, testMode
               <input {...text("name")} required />
             </Field>
             <Field label="Téléphone" className="sm:col-span-3">
-              <input {...text("phone")} type="tel" inputMode="tel" />
+              <PhoneInput className={inputClass} value={customer.phone} onChange={(phone) => setCustomer((c) => ({ ...c, phone }))} />
             </Field>
             <Field label="E-mail (facultatif)" className="sm:col-span-3">
               <input {...text("email")} type="email" inputMode="email" />
@@ -165,10 +166,10 @@ export default function OrderForm({ articles, agenda, today, mailReady, testMode
               ) : null}
             </Field>
             <Field label={mode === "retrait" ? "Adresse (facultatif)" : "Adresse de livraison"} className="sm:col-span-6">
-              <input {...text("address", "Numéro et rue")} required={mode !== "retrait"} />
+              <AddressInput className={inputClass} value={customer.address} required={mode !== "retrait"} onChange={(address) => setCustomer((c) => ({ ...c, address }))} onPick={(picked) => setCustomer((c) => ({ ...c, ...picked }))} />
             </Field>
             <Field label="Code postal" className="sm:col-span-2">
-              <input {...text("postalCode")} inputMode="numeric" />
+              <input {...text("postalCode")} inputMode="numeric" maxLength={5} pattern="\d{5}" title="5 chiffres" onChange={(e) => setCustomer((c) => ({ ...c, postalCode: e.target.value.replace(/\D/g, "").slice(0, 5) }))} />
             </Field>
             <Field label="Ville" className="sm:col-span-4">
               <input {...text("city")} required={mode !== "retrait"} />

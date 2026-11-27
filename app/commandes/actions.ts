@@ -685,6 +685,39 @@ export async function cancelOrder(orderId: string) {
   );
 }
 
+/**
+ * Remboursement validé : la commande passe à « annulée » avec la trace du remboursement.
+ * Comme toute commande annulée, elle sort des ventes, des encaissements, des marges et des tournées.
+ */
+export async function refundOrder(orderNumber: string, amount: number, restock: boolean, sav: string) {
+  return run(() =>
+    mutate((db) => {
+      const order = db.orders.find((o) => o.number === orderNumber);
+      if (!order) throw new UserError("Bon de commande introuvable.");
+      if (order.refund) throw new UserError("Cette commande est déjà remboursée.");
+      if (order.status === "cancelled") throw new UserError("Cette commande est déjà annulée.");
+      const value = round2(Number(amount));
+      if (!Number.isFinite(value) || value < 0) throw new UserError("Montant du remboursement invalide.");
+      if (value > order.paid + 0.005) throw new UserError(`Le client a réglé ${euros(order.paid)} : on ne peut pas lui rendre davantage.`);
+      if (restock) {
+        // Seules les pièces sorties du stock pour cette commande y reviennent.
+        for (const line of order.lines) {
+          if (!line.reserved) continue;
+          const article = db.articles.find((a) => a.id === line.articleId);
+          if (article) article.stock += line.quantity;
+          line.reserved = false;
+        }
+      }
+      order.status = "cancelled";
+      order.doneAt = now();
+      order.refund = { at: now(), amount: value, restocked: restock, sav: clean(sav, 20) };
+      log(order, `Commande remboursée : ${euros(value)} rendus au client${restock ? ", articles remis en stock" : ""}${sav ? ` (demande ${clean(sav, 20)})` : ""}`);
+      if (restock) allocate(db);
+      return undefined;
+    }),
+  );
+}
+
 /** Place une adresse saisie à la main sur la carte, sans rien enregistrer (départ ponctuel d'une tournée). */
 export async function locateAddress(address: string) {
   return run(async () => {

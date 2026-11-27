@@ -3,8 +3,10 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { ACCESS_COOKIE, accessPassword, accessToken } from "@/lib/access";
-import { UserError, clean, frDate, id, isDate, now } from "@/lib/orders/build";
+import { UserError, clean, euros, frDate, id, isDate, now } from "@/lib/orders/build";
 import { hourLabel } from "@/lib/orders/logic";
+import { refundOrder } from "@/app/commandes/actions";
+import { getSav } from "@/lib/sav/store";
 import { StoreError } from "@/lib/orders/store";
 import type { Result } from "@/lib/orders/types";
 import { cleanMoment, mutateSav } from "@/lib/sav/store";
@@ -72,6 +74,7 @@ export async function saveSavTicket(input: SavInput) {
         visitNote: "",
         report: "",
         doneAt: null,
+        refunded: null,
         history: [{ at: now(), text: "Demande enregistrée" }],
       };
       db.tickets.push(ticket);
@@ -115,6 +118,30 @@ export async function closeSavTicket(ticketId: string, report: string) {
       log(ticket, "Demande terminée");
     }),
   );
+}
+
+/**
+ * Valide le remboursement : la commande reliée est marquée remboursée (elle sort de tous les chiffres),
+ * puis la demande est terminée avec le montant rendu.
+ */
+export async function refundSavTicket(ticketId: string, amount: number, restock: boolean) {
+  return run(async () => {
+    const ticket = find(await getSav(), ticketId);
+    if (ticket.refunded !== null) throw new UserError("Le remboursement de cette demande est déjà validé.");
+    if (!ticket.orderNumber) throw new UserError("Reliez d'abord la demande à un bon de commande.");
+    const result = await refundOrder(ticket.orderNumber, amount, restock, ticket.number);
+    if (!result.ok) throw new UserError(result.error);
+    const value = Math.round(Number(amount) * 100) / 100;
+    return mutateSav((db) => {
+      const current = find(db, ticketId);
+      current.refunded = value;
+      current.status = "terminee";
+      current.doneAt = now();
+      const line = `Remboursement validé : ${euros(value)} rendus au client${restock ? ", articles remis en stock" : ""}.`;
+      current.report = current.report ? `${current.report}\n${line}` : line;
+      log(current, `Remboursement validé (${euros(value)}) · commande ${current.orderNumber} sortie des chiffres`);
+    });
+  });
 }
 
 export async function cancelSavTicket(ticketId: string) {

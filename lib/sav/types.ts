@@ -1,12 +1,13 @@
 /** Service après-vente : une demande d'un client, puis un rendez-vous chez lui. */
 export type SavStatus = "nouvelle" | "planifiee" | "terminee" | "annulee";
-export type SavKind = "reparation" | "piece" | "echange" | "retour" | "autre";
+export type SavKind = "reparation" | "piece" | "echange" | "retour" | "retractation" | "autre";
 
 export const SAV_KINDS: Record<SavKind, string> = {
   reparation: "Réparation",
   piece: "Pièce manquante ou abîmée",
   echange: "Échange",
   retour: "Retour",
+  retractation: "Rétractation (14 jours)",
   autre: "Autre",
 };
 
@@ -48,6 +49,8 @@ export interface SavTicket {
   /** Compte rendu saisi à la clôture. */
   report: string;
   doneAt: string | null;
+  /** Montant remboursé au client quand le remboursement a été validé, sinon null. */
+  refunded: number | null;
   history: { at: string; text: string }[];
 }
 
@@ -65,5 +68,18 @@ export interface SavInput {
   kind: SavKind;
   problem: string;
 }
+
+/** Délai légal de rétractation, en jours, à compter de la réception de l'article. */
+export const RETRACTION_DAYS = 14;
+
+/** Rappel affiché pour une demande de rétractation (vente à distance uniquement). */
+export const RETRACTION_RULES = [
+  "Valable seulement pour une vente à distance (site, téléphone, bon signé à distance) ou hors du magasin. Un achat fait au magasin n'y donne pas droit.",
+  "Le client a 14 jours à partir de la réception de l'article pour demander.",
+  "Le client rapporte l'article au magasin, à ses frais.",
+  "On rembourse l'article et la livraison standard payée à l'aller, dans les 14 jours, une fois l'article récupéré. Seul le supplément d'une livraison plus chère que la standard peut être gardé.",
+  "Article abîmé : on peut déduire la perte de valeur du remboursement, pas le refuser en bloc.",
+  "Pas de rétractation pour un article fabriqué sur mesure ou personnalisé.",
+];
 
 export const savAddress = (customer: SavCustomer) => [customer.address, [customer.postalCode, customer.city].filter(Boolean).join(" ")].filter(Boolean).join(", ");

@@ -1,12 +1,13 @@
 "use client";
 
-import { Ban, CalendarClock, Check, ChevronDown, ChevronRight, Loader2, MapPin, PencilLine, Phone, Plus, Save, Search, Trash2, Undo2, Wrench, X } from "lucide-react";
+import { Ban, Banknote, CalendarClock, Check, ChevronDown, ChevronRight, Loader2, MapPin, PencilLine, Phone, Plus, Save, Search, Trash2, Undo2, Wrench, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { cancelSavTicket, closeSavTicket, deleteSavTicket, reopenSavTicket, saveSavTicket, scheduleSavVisit } from "@/app/sav/actions";
-import { dateFr } from "@/lib/format";
-import { dayLabel, hourLabel } from "@/lib/orders/logic";
-import { SAV_KINDS, SAV_STATUS, savAddress, type SavCustomer, type SavKind, type SavStatus, type SavTicket } from "@/lib/sav/types";
+import { cancelSavTicket, closeSavTicket, deleteSavTicket, refundSavTicket, reopenSavTicket, saveSavTicket, scheduleSavVisit } from "@/app/sav/actions";
+import { dateFr, eur } from "@/lib/format";
+import { addDays, dayLabel, hourLabel } from "@/lib/orders/logic";
+import { RETRACTION_DAYS, RETRACTION_RULES, SAV_KINDS, SAV_STATUS, savAddress, type SavCustomer, type SavKind, type SavStatus, type SavTicket } from "@/lib/sav/types";
 import { confirmDialog } from "../ConfirmDialog";
+import { AddressInput, PhoneInput, formatPhone } from "../ContactInputs";
 import { useAction } from "../orders/OrderActions";
 import { EmptyState, MomentSelect, inputClass } from "../orders/bits";
 import { Card, buttonPrimary, buttonSecondary } from "../ui";
@@ -16,6 +17,13 @@ export interface SavOrder {
   number: string;
   customer: SavCustomer;
   products: string[];
+  /** Jour où la commande a été livrée ou retirée (AAAA-MM-JJ), null si pas encore. */
+  deliveredOn: string | null;
+  /** Total de la commande et montant déjà réglé par le client. */
+  total: number;
+  paid: number;
+  /** Commande déjà annulée ou remboursée. */
+  closed: boolean;
 }
 
 const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -33,14 +41,37 @@ function Tile({ label, value, hint }: { label: string; value: string; hint?: str
   );
 }
 
+/** Rappel des règles de la rétractation, avec le délai calculé quand le bon de commande est connu. */
+function RetractionNote({ order, askedOn }: { order?: SavOrder; askedOn: string }) {
+  const limit = order?.deliveredOn ? addDays(order.deliveredOn, RETRACTION_DAYS) : null;
+  const late = limit !== null && askedOn > limit;
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">
+      <div className="text-xs font-semibold uppercase tracking-wide">Rétractation : les règles</div>
+      {limit && order?.deliveredOn ? (
+        <p className={`mt-1 font-medium ${late ? "text-rose-700" : ""}`}>
+          Article reçu le {dateFr(order.deliveredOn)} : demande possible jusqu&apos;au {dateFr(limit)}. {late ? "Délai dépassé : le client n'a plus ce droit." : "La demande est dans le délai."}
+        </p>
+      ) : (
+        <p className="mt-1 font-medium">{order ? "Cette commande n'est pas encore marquée livrée : le délai de 14 jours n'a pas commencé." : "Bon de commande non relié : vérifiez vous-même la date de réception."}</p>
+      )}
+      <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-[13px]">
+        {RETRACTION_RULES.map((rule) => (
+          <li key={rule}>{rule}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function StatusBadge({ status }: { status: SavStatus }) {
   return <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${SAV_STATUS[status].style}`}>{SAV_STATUS[status].label}</span>;
 }
 
 /** Formulaire d'une demande : client, produit, problème. Un bon de commande existant peut pré-remplir le client. */
-function TicketForm({ ticket, orders, onClose }: { ticket?: SavTicket; orders: SavOrder[]; onClose: () => void }) {
+function TicketForm({ ticket, orders, today, onClose }: { ticket?: SavTicket; orders: SavOrder[]; today: string; onClose: () => void }) {
   const { pending, run } = useAction();
-  const [customer, setCustomer] = useState<SavCustomer>(ticket?.customer ?? EMPTY_CUSTOMER);
+  const [customer, setCustomer] = useState<SavCustomer>(ticket ? { ...ticket.customer, phone: formatPhone(ticket.customer.phone) } : EMPTY_CUSTOMER);
   const [orderNumber, setOrderNumber] = useState(ticket?.orderNumber ?? "");
   const [product, setProduct] = useState(ticket?.product ?? "");
   const [kind, setKind] = useState<SavKind>(ticket?.kind ?? "reparation");
@@ -56,7 +87,7 @@ function TicketForm({ ticket, orders, onClose }: { ticket?: SavTicket; orders: S
   const linked = orders.find((order) => order.number === orderNumber);
 
   const pick = (order: SavOrder) => {
-    setCustomer(order.customer);
+    setCustomer({ ...order.customer, phone: formatPhone(order.customer.phone) });
     setOrderNumber(order.number);
     if (!product && order.products.length === 1) setProduct(order.products[0]);
     setSearch("");
@@ -113,7 +144,7 @@ function TicketForm({ ticket, orders, onClose }: { ticket?: SavTicket; orders: S
         </label>
         <label>
           <span className={labelClass}>Téléphone</span>
-          <input className={inputClass} type="tel" inputMode="tel" value={customer.phone} onChange={set("phone")} />
+          <PhoneInput className={inputClass} value={customer.phone} onChange={(phone) => setCustomer((current) => ({ ...current, phone }))} />
         </label>
         <label>
           <span className={labelClass}>E-mail (facultatif)</span>
@@ -121,11 +152,11 @@ function TicketForm({ ticket, orders, onClose }: { ticket?: SavTicket; orders: S
         </label>
         <label className="sm:col-span-2 lg:col-span-1">
           <span className={labelClass}>Adresse du rendez-vous</span>
-          <input className={inputClass} value={customer.address} onChange={set("address")} />
+          <AddressInput className={inputClass} value={customer.address} onChange={(address) => setCustomer((current) => ({ ...current, address }))} onPick={(picked) => setCustomer((current) => ({ ...current, ...picked }))} />
         </label>
         <label>
           <span className={labelClass}>Code postal</span>
-          <input className={inputClass} inputMode="numeric" value={customer.postalCode} onChange={set("postalCode")} />
+          <input className={inputClass} inputMode="numeric" maxLength={5} pattern="\d{5}" title="5 chiffres" value={customer.postalCode} onChange={(e) => setCustomer((current) => ({ ...current, postalCode: e.target.value.replace(/\D/g, "").slice(0, 5) }))} />
         </label>
         <label>
           <span className={labelClass}>Ville</span>
@@ -155,8 +186,10 @@ function TicketForm({ ticket, orders, onClose }: { ticket?: SavTicket; orders: S
         </label>
       </div>
 
+      {kind === "retractation" ? <RetractionNote order={linked} askedOn={ticket ? ticket.createdAt.slice(0, 10) : today} /> : null}
+
       <label className="block">
-        <span className={labelClass}>Problème signalé par le client</span>
+        <span className={labelClass}>{kind === "retractation" ? "Ce que demande le client" : "Problème signalé par le client"}</span>
         <textarea className={`${inputClass} min-h-[96px]`} placeholder="Ce qui ne va pas, depuis quand, ce que le client attend…" value={problem} onChange={(e) => setProblem(e.target.value)} required />
       </label>
 
@@ -184,7 +217,7 @@ function VisitForm({ ticket, today }: { ticket: SavTicket; today: string }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
       <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        <CalendarClock size={14} /> Rendez-vous chez le client
+        <CalendarClock size={14} /> {ticket.kind === "retractation" ? "Rendez-vous au magasin (le client rapporte l'article)" : "Rendez-vous chez le client"}
       </div>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <label>
@@ -196,7 +229,7 @@ function VisitForm({ ticket, today }: { ticket: SavTicket; today: string }) {
           <MomentSelect value={moment} onChange={setMoment} />
         </label>
         <label>
-          <span className={labelClass}>Qui y va (facultatif)</span>
+          <span className={labelClass}>{ticket.kind === "retractation" ? "Qui le reçoit (facultatif)" : "Qui y va (facultatif)"}</span>
           <input className={inputClass} placeholder="Nom de l'intervenant" value={technician} onChange={(e) => setTechnician(e.target.value)} />
         </label>
         <label>
@@ -228,11 +261,64 @@ function VisitForm({ ticket, today }: { ticket: SavTicket; today: string }) {
   );
 }
 
+/** Validation du remboursement : montant rendu et retour des articles en stock. La commande sort ensuite de tous les chiffres. */
+function RefundForm({ ticket, order, onClose }: { ticket: SavTicket; order: SavOrder; onClose: () => void }) {
+  const { pending, run } = useAction();
+  const [amount, setAmount] = useState(String(order.paid).replace(".", ","));
+  const [restock, setRestock] = useState(true);
+  const value = Number(amount.replace(/\s/g, "").replace(",", "."));
+  const valid = Number.isFinite(value) && value >= 0 && value <= order.paid + 0.005;
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <Banknote size={14} /> Remboursement de la commande {order.number}
+      </div>
+      <p className="text-sm text-slate-600">
+        Total de la commande : {eur(order.total)} · déjà réglé par le client : {eur(order.paid)}.
+      </p>
+      <div className="mt-2 flex flex-wrap items-end gap-3">
+        <label>
+          <span className={labelClass}>Montant rendu au client (€)</span>
+          <input className={`${inputClass} w-44`} inputMode="decimal" aria-label="Montant rendu au client" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </label>
+        <label className="flex items-center gap-2 pb-2 text-sm text-slate-700">
+          <input type="checkbox" className="h-4 w-4 accent-black" checked={restock} onChange={(e) => setRestock(e.target.checked)} />
+          Remettre les articles en stock
+        </label>
+      </div>
+      {valid ? null : <p className="mt-1 text-xs text-rose-700">Le montant doit être compris entre 0 et {eur(order.paid)}.</p>}
+      <p className="mt-2 text-xs text-slate-500">Une fois validé, la commande est marquée « Remboursée » et n&apos;est plus comptée dans les ventes, les encaissements ni les marges. Cette action ne s&apos;annule pas.</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={pending || !valid}
+          onClick={async () => {
+            if (!(await confirmDialog({ title: `Valider le remboursement de ${eur(value)} ?`, message: `La commande ${order.number} sera marquée remboursée et sortira de tous les chiffres. C'est définitif.`, confirmLabel: "Valider le remboursement", tone: "danger" }))) return;
+            run(async () => {
+              const result = await refundSavTicket(ticket.id, value, restock);
+              if (result.ok) onClose();
+              return result;
+            }, "Remboursement validé");
+          }}
+          className={buttonPrimary}
+        >
+          {pending ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Valider le remboursement
+        </button>
+        <button type="button" onClick={onClose} className={buttonSecondary}>
+          Annuler
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** Une demande : résumé toujours visible, détail et actions quand on l'ouvre. */
 function TicketCard({ ticket, orders, today, open, onToggle }: { ticket: SavTicket; orders: SavOrder[]; today: string; open: boolean; onToggle: () => void }) {
   const { pending, run } = useAction();
   const [editing, setEditing] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [refunding, setRefunding] = useState(false);
+  const order = orders.find((item) => item.number === ticket.orderNumber);
   const [report, setReport] = useState(ticket.report);
   const address = savAddress(ticket.customer);
   const closed = ticket.status === "terminee" || ticket.status === "annulee";
@@ -247,6 +333,7 @@ function TicketCard({ ticket, orders, today, open, onToggle }: { ticket: SavTick
             <span className="font-medium text-slate-900">{ticket.customer.name}</span>
             <span className="text-xs text-slate-500">{ticket.number}</span>
             <StatusBadge status={ticket.status} />
+            {ticket.refunded !== null ? <span className="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-medium text-white">Remboursée · {eur(ticket.refunded)}</span> : null}
             {late ? <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700">Date dépassée</span> : null}
           </span>
           <span className="mt-0.5 block truncate text-sm text-slate-600">
@@ -263,7 +350,7 @@ function TicketCard({ ticket, orders, today, open, onToggle }: { ticket: SavTick
 
       {open ? (
         editing ? (
-          <TicketForm ticket={ticket} orders={orders} onClose={() => setEditing(false)} />
+          <TicketForm ticket={ticket} orders={orders} today={today} onClose={() => setEditing(false)} />
         ) : (
           <div className="space-y-3 border-t border-slate-100 bg-slate-50 px-4 py-4 sm:px-5">
             <div className="grid gap-3 text-sm sm:grid-cols-2">
@@ -290,10 +377,12 @@ function TicketCard({ ticket, orders, today, open, onToggle }: { ticket: SavTick
                 {ticket.orderNumber ? <div className="pl-[22px] text-xs text-slate-500">Bon de commande {ticket.orderNumber}</div> : null}
               </div>
               <div>
-                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Problème signalé</div>
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{ticket.kind === "retractation" ? "Demande du client" : "Problème signalé"}</div>
                 <p className="mt-1 whitespace-pre-wrap text-slate-800">{ticket.problem}</p>
               </div>
             </div>
+
+            {ticket.kind === "retractation" && ticket.refunded === null ? <RetractionNote order={order} askedOn={ticket.createdAt.slice(0, 10)} /> : null}
 
             {ticket.report ? (
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
@@ -304,7 +393,9 @@ function TicketCard({ ticket, orders, today, open, onToggle }: { ticket: SavTick
 
             {closed ? null : <VisitForm key={`${ticket.visitDate}-${ticket.visitMoment}`} ticket={ticket} today={today} />}
 
-            {closing ? (
+            {refunding && order ? (
+              <RefundForm ticket={ticket} order={order} onClose={() => setRefunding(false)} />
+            ) : closing ? (
               <div className="rounded-lg border border-slate-200 bg-white p-3">
                 <label className="block">
                   <span className={labelClass}>Compte rendu : ce qui a été fait (facultatif)</span>
@@ -341,6 +432,11 @@ function TicketCard({ ticket, orders, today, open, onToggle }: { ticket: SavTick
                     <button type="button" onClick={() => setClosing(true)} className={buttonSecondary}>
                       <Check size={16} /> Terminer la demande
                     </button>
+                    {ticket.refunded === null && order && !order.closed ? (
+                      <button type="button" onClick={() => setRefunding(true)} className={buttonSecondary}>
+                        <Banknote size={16} /> Valider le remboursement
+                      </button>
+                    ) : null}
                     <button type="button" onClick={() => setEditing(true)} className={buttonSecondary}>
                       <PencilLine size={16} /> Modifier
                     </button>
@@ -476,7 +572,7 @@ export default function SavBoard({ tickets, orders, today }: { tickets: SavTicke
           </button>
         </div>
 
-        {creating ? <TicketForm orders={orders} onClose={() => setCreating(false)} /> : null}
+        {creating ? <TicketForm orders={orders} today={today} onClose={() => setCreating(false)} /> : null}
 
         {list.length === 0 ? (
           creating ? null : (
