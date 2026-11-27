@@ -1,5 +1,8 @@
 import { ArrowUpRight, Boxes, CreditCard, Package, PackageCheck, Truck } from "lucide-react";
+import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
+import { Suspense } from "react";
+import { CLERK_ON } from "@/lib/clerk";
 import { accessPassword } from "@/lib/access";
 import { getSettings } from "@/lib/settings";
 import { TestModeSwitch } from "@/components/TestMode";
@@ -54,7 +57,13 @@ export default async function HomePage() {
             <Link href="/parametres" className="rounded-lg px-3 py-1.5 text-sm font-medium text-neutral-400 transition hover:bg-white/10 hover:text-white">
               Paramètres
             </Link>
-          {accessPassword() ? (
+          {CLERK_ON ? (
+            <span className="ml-1 inline-flex items-center">
+              <Suspense>
+                <UserButton />
+              </Suspense>
+            </span>
+          ) : accessPassword() ? (
             <form action={logout}>
               <button type="submit" className="rounded-lg px-3 py-1.5 text-sm font-medium text-neutral-400 transition hover:bg-white/10 hover:text-white">
                 Se déconnecter

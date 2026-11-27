@@ -1,9 +1,12 @@
+import { ClerkProvider } from "@clerk/nextjs";
+import { frFR } from "@clerk/localizations";
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import NavProgress from "@/components/NavProgress";
 import { Toaster } from "@/components/orders/SectionShell";
 import { TestBanner } from "@/components/TestMode";
+import { CLERK_ON } from "@/lib/clerk";
 import { currentScope } from "@/lib/orders/store";
 import "./globals.css";
 
@@ -26,14 +29,26 @@ export const viewport: Viewport = {
 export const dynamic = "force-dynamic";
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const page = (
+    <>
+      <NavProgress />
+      <ConfirmDialog />
+      <Toaster />
+      {(await currentScope()) === "test" ? <TestBanner /> : null}
+      <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+    </>
+  );
   return (
     <html lang="fr" className={inter.variable}>
       <body className="flex h-dvh flex-col overflow-hidden font-sans">
-        <NavProgress />
-        <ConfirmDialog />
-        <Toaster />
-        {(await currentScope()) === "test" ? <TestBanner /> : null}
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+        {/* Comptes utilisateurs : seulement si les clés Clerk sont configurées. */}
+        {CLERK_ON ? (
+          <ClerkProvider localization={frFR} signInUrl="/compte" afterSignOutUrl="/compte">
+            {page}
+          </ClerkProvider>
+        ) : (
+          page
+        )}
       </body>
     </html>
   );
